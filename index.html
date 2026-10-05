@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1E6A44">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rilievi Seme">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="lib/leaflet/leaflet.css">
+<title>Rilievi Seme</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: app a tutto schermo per iPhone. Intestazione, area scorrevole, barra a 3 schede. La scheda del campo si apre sopra a schermo intero. */
+:root{
+  --bg:#ECEFE7; --surface:#FAFBF7; --ink:#16221A; --muted:#566558; --line:#C9D1C3;
+  --accent:#1E6A44; --on-accent:#FFFFFF; --accent-soft:#D8E8DC;
+  --bad:#B3261E; --on-bad:#FFFFFF; --bad-soft:#F6DAD6; --warn:#A55F00;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-head:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1511; --surface:#161F19; --ink:#E6EDE4; --muted:#8FA192; --line:#2A382E;
+    --accent:#62C98F; --on-accent:#08170E; --accent-soft:#1D3326;
+    --bad:#FF8178; --on-bad:#1A0705; --bad-soft:#3A1E1B; --warn:#E8A93A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1511; --surface:#161F19; --ink:#E6EDE4; --muted:#8FA192; --line:#2A382E;
+  --accent:#62C98F; --on-accent:#08170E; --accent-soft:#1D3326;
+  --bad:#FF8178; --on-bad:#1A0705; --bad-soft:#3A1E1B; --warn:#E8A93A; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.35;overflow:hidden;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+
+#app{height:100%;display:flex;flex-direction:column;max-width:760px;margin:0 auto}
+.top{padding:12px 16px 10px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-family:var(--f-head);font-weight:700;font-size:1.9rem;line-height:1;letter-spacing:.02em;text-transform:uppercase}
+.top .sub{color:var(--muted);font-size:.9rem;margin-top:4px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none;margin-bottom:6px}
+.dot.ok{background:var(--accent)} .dot.err{background:var(--bad)} .dot.busy{background:var(--warn)}
+
+main{flex:1;min-height:0;position:relative}
+.view{position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch}
+.view.map{display:flex;flex-direction:column;overflow:hidden}
+
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);background:var(--surface)}
+.tabs button{border:0;background:none;padding:9px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-family:var(--f-head);font-weight:600;font-size:.82rem;letter-spacing:.1em;text-transform:uppercase}
+.tabs button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.tabs button[aria-selected="true"]{color:var(--accent)}
+
+/* Filtri */
+.filters{padding:12px 16px;display:grid;gap:10px;border-bottom:1px solid var(--line);background:var(--bg)}
+.search{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);font-size:16px}
+.sel-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.sel-wrap{display:flex;flex-direction:column;gap:3px;min-width:0}
+.lbl{font-family:var(--f-head);font-weight:600;font-size:.82rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+select{width:100%;min-width:0;appearance:none;-webkit-appearance:none;padding:10px 30px 10px 10px;border:1.5px solid var(--line);border-radius:8px;background-color:var(--surface);font-size:16px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 17px) 55%,calc(100% - 12px) 55%;background-size:5px 5px;background-repeat:no-repeat;text-overflow:ellipsis}
+.stato{display:grid;grid-template-columns:repeat(3,1fr);border:1.5px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.stato button{border:0;background:none;padding:9px 4px;font-weight:500}
+.stato button+button{border-left:1.5px solid var(--line)}
+.stato button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);font-weight:600}
+.summary{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 16px;color:var(--muted);font-size:.92rem;border-bottom:1px solid var(--line)}
+.linkbtn{border:0;background:none;color:var(--accent);font-weight:600;padding:4px 0;text-decoration:underline;text-underline-offset:3px}
+.banner{margin:12px 16px 0;padding:10px 12px;border:1.5px dashed var(--warn);border-radius:8px;font-size:.92rem}
+.banner b{color:var(--warn)}
+
+/* Elenco */
+.row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:12px 16px;align-items:start}
+.row:active{background:var(--accent-soft)}
+.row .code{grid-column:1;grid-row:1;font-family:var(--f-mono);font-weight:600;font-size:.88rem;display:flex;align-items:center;gap:7px;padding-top:2px;white-space:nowrap}
+.sw{width:11px;height:11px;border-radius:2px;flex:none}
+.row .main{grid-column:2;grid-row:1;min-width:0}
+.row .who{font-weight:600;font-size:1.05rem;overflow-wrap:anywhere}
+.row .meta{color:var(--muted);font-size:.9rem;overflow-wrap:anywhere}
+.row .side{grid-column:3;grid-row:1;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.ha{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{font-family:var(--f-head);font-weight:600;font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:99px;border:1.5px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.done{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent)}
+.rchips{grid-column:1 / -1;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.rcount{font-family:var(--f-head);font-weight:600;font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+.rchip{font-family:var(--f-mono);font-size:.78rem;font-weight:500;border:1.5px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rchip.bad{border-color:var(--bad);color:var(--bad)}
+.hist{display:flex;flex-wrap:wrap;gap:8px}
+.hbtn{min-height:44px;padding:6px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);font-family:var(--f-mono);font-weight:600;font-size:.9rem;font-variant-numeric:tabular-nums}
+.hbtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.hbtn.bad:not([aria-pressed="true"]){border-color:var(--bad);color:var(--bad)}
+.hbtn.draft{border-style:dashed}
+.flags{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.flag{font-size:.82rem;font-weight:600;color:var(--bad);background:var(--bad-soft);padding:2px 8px;border-radius:5px}
+.empty{padding:36px 16px;color:var(--muted);text-align:center}
+.empty b{display:block;color:var(--ink);font-size:1.1rem;margin-bottom:6px}
+
+/* Mappa */
+.mapbar{padding:10px 16px;display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;border-bottom:1px solid var(--line)}
+.mapwrap{position:relative;flex:1;min-height:0;background:var(--surface);touch-action:none}
+#map{display:block;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none}
+.zoom{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.zoom button{border:0;background:none;width:44px;height:44px;font-size:1.4rem;font-weight:600}
+.zoom button+button{border-top:1.5px solid var(--line)}
+.zoom button.fit{font-size:.8rem;font-family:var(--f-head);letter-spacing:.08em;text-transform:uppercase}
+.legend{position:absolute;left:12px;bottom:10px;right:12px;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.82rem;color:var(--muted);pointer-events:none}
+.legend span{display:inline-flex;align-items:center;gap:5px;background:color-mix(in srgb,var(--surface) 85%,transparent);padding:1px 6px;border-radius:4px}
+.selcard{border-top:1px solid var(--line);padding:12px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;background:var(--bg)}
+.selcard .t{font-weight:600;overflow-wrap:anywhere}
+.selcard .m{color:var(--muted);font-size:.9rem;overflow-wrap:anywhere}
+.routebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;border-top:1px solid var(--line)}
+.routebar span{color:var(--muted);font-size:.88rem;min-width:0;flex:1 1 180px}
+.mapnote{padding:8px 16px;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line)}
+
+/* Pulsanti */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface);font-weight:600;text-decoration:none;color:var(--ink);min-height:48px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.btn[aria-disabled="true"]{opacity:.5}
+.btn.sm{min-height:42px;padding:8px 14px}
+
+/* Dati */
+.sec{padding:16px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.sec h2{margin:0;font-family:var(--f-head);font-weight:700;font-size:1.25rem;letter-spacing:.04em;text-transform:uppercase}
+.sec p{margin:0;color:var(--muted)}
+.cols{display:flex;flex-wrap:wrap;gap:6px}
+.col{font-family:var(--f-mono);font-size:.8rem;border:1.5px solid var(--line);border-radius:5px;padding:2px 7px}
+.col.on{border-color:var(--accent);color:var(--accent)}
+.res{border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:4px;font-size:.95rem}
+.res.err{border-color:var(--bad);color:var(--bad)}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer;font-size:0}
+
+/* Scheda campo */
+#detail{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;max-width:760px;margin:0 auto}
+.dhead{padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);background:var(--bg)}
+.back{border:1.5px solid var(--line);background:var(--surface);border-radius:8px;min-width:48px;min-height:44px;font-size:1.4rem;line-height:1}
+.dhead .t{font-family:var(--f-mono);font-weight:600;font-size:1.15rem}
+.dhead .s{color:var(--muted);font-size:.9rem}
+.dbody{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px;padding:14px 16px;border-bottom:1px solid var(--line);margin:0}
+.facts div{min-width:0}
+.facts dt{font-family:var(--f-head);font-weight:600;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.facts dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.nav{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line)}
+.q{padding:14px 16px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.q h3{margin:0;font-family:var(--f-head);font-weight:700;font-size:1.2rem;letter-spacing:.05em;text-transform:uppercase}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg label{display:block;position:relative}
+.seg input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
+.seg span{display:flex;align-items:center;justify-content:center;text-align:center;min-height:52px;padding:8px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);font-weight:600}
+.seg .good input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.seg .bad input:checked+span{background:var(--bad);border-color:var(--bad);color:var(--on-bad)}
+.seg input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{position:relative}
+.chip input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
+.chip span{display:inline-flex;align-items:center;min-height:44px;padding:6px 14px;border:1.5px solid var(--line);border-radius:99px;background:var(--surface);font-weight:500}
+.chip input:checked+span{background:var(--bad-soft);border-color:var(--bad);color:var(--bad);font-weight:600}
+.chip input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+.field{display:grid;gap:5px}
+.in,.ta{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);font-size:16px}
+.ta{min-height:110px;resize:vertical}
+.inwrap{display:flex;align-items:center;gap:8px}
+.inwrap .in{max-width:140px;font-family:var(--f-mono);font-weight:600}
+.inwrap span{font-weight:600;font-size:1.1rem}
+.report{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--f-mono);font-size:.85rem;line-height:1.5;background:var(--surface);border:1.5px solid var(--line);border-radius:8px;padding:12px}
+.hint{margin:0;color:var(--muted);font-size:.88rem}
+.dfoot{padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 10px);border-top:1px solid var(--line);background:var(--surface);display:grid;grid-template-columns:1fr auto;gap:8px}
+.dfoot .btn{min-height:50px}
+.reset{padding:12px 16px 28px}
+
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.thumb{padding:0;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--surface);max-width:100%}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.fotohead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.fotohead span{color:var(--muted);font-size:.92rem}
+/* Visore foto: sfondo nero in ogni tema, come un lightbox */
+#viewer{position:fixed;inset:0;z-index:30;background:#000;color:#fff;display:flex;flex-direction:column;max-width:760px;margin:0 auto}
+#viewer .vtop{padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+#viewer .vimg{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 8px}
+#viewer img{max-width:100%;max-height:100%;object-fit:contain}
+#viewer .vbar{padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 10px);display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#viewer .btn{background:#1d1d1d;border-color:#444;color:#fff}
+#viewer .btn.danger{color:#ff8178;border-color:#ff8178}
+#sendSheet{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+#sendSheet .sheet{width:100%;max-width:760px;background:var(--bg);border-radius:14px 14px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);display:grid;gap:10px}
+#sendSheet h3{margin:0;font-family:var(--f-head);font-weight:700;font-size:1.3rem;letter-spacing:.05em;text-transform:uppercase}
+#sendSheet p{margin:0}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);z-index:40;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;max-width:90vw;text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+html,body{margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+#map{position:absolute;inset:0;width:auto;height:auto;z-index:0;background:var(--surface)}
+.mapwrap{isolation:isolate;touch-action:auto}
+.zoom{z-index:1000;right:10px;top:10px}
+.zoom button{width:auto;min-width:88px;height:40px;padding:0 10px;font-family:var(--f-head);font-size:.82rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.legend{z-index:1000;bottom:26px}
+.mapmsg{position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);z-index:1000;text-align:center;padding:14px;border:1.5px dashed var(--warn);border-radius:8px;background:var(--surface)}
+.leaflet-container{font-family:var(--f-body)}
+.mlabel{background:rgba(255,255,255,.88);color:#16221A;border:0;box-shadow:none;border-radius:4px;padding:0 5px;font:600 11px var(--f-mono)}
+.mlabel:before{display:none}
+#fileSheet{position:fixed;inset:0;z-index:38;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+#fileSheet .sheet{width:100%;max-width:760px;background:var(--bg);border-radius:14px 14px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);display:grid;gap:10px}
+#fileSheet h3{margin:0;font-family:var(--f-head);font-weight:700;font-size:1.3rem;letter-spacing:.05em;text-transform:uppercase}
+#fileSheet p{margin:0;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div style="min-width:0">
+      <h1 id="hdTitle">Campi</h1>
+      <div class="sub" id="hdSub"></div>
+    </div>
+    <span class="dot" id="dot" role="img" aria-label="Stato salvataggio"></span>
+  </header>
+
+  <main>
+    <section class="view" id="v-campi" aria-label="Elenco campi">
+      <div class="filters">
+        <input class="search" id="q" type="search" placeholder="Cerca codice, agricoltore, ditta" autocomplete="off" aria-label="Cerca">
+        <div class="sel-row">
+          <div class="sel-wrap" data-wrap="coltura"><label class="lbl" for="f-coltura">Coltura</label><select id="f-coltura" data-f="coltura"></select></div>
+          <div class="sel-wrap" data-wrap="zona"><label class="lbl" for="f-zona">Zona</label><select id="f-zona" data-f="zona"></select></div>
+          <div class="sel-wrap" data-wrap="ditta"><label class="lbl" for="f-ditta">Ditta</label><select id="f-ditta" data-f="ditta"></select></div>
+        </div>
+        <div class="stato" role="group" aria-label="Stato rilievo">
+          <button type="button" data-stato="" aria-pressed="true">Tutti</button>
+          <button type="button" data-stato="todo" aria-pressed="false">Da fare</button>
+          <button type="button" data-stato="done" aria-pressed="false">Fatti</button>
+        </div>
+      </div>
+      <div class="summary"><span id="sumTxt"></span><button class="linkbtn" id="resetF" type="button" hidden>Azzera filtri</button></div>
+      <div id="demoBanner" class="banner" hidden><b>Dati di esempio.</b> Vai nella scheda Dati e importa il tuo file Excel: gli esempi vengono sostituiti.</div>
+      <div id="list"></div>
+    </section>
+
+    <section class="view map" id="v-mappa" aria-label="Mappa campi" hidden>
+      <div class="mapbar">
+        <div class="sel-wrap"><label class="lbl" for="m-coltura">Coltura</label><select id="m-coltura" data-f="coltura"></select></div>
+        <div class="sel-wrap" data-wrap="zona"><label class="lbl" for="m-zona">Zona</label><select id="m-zona" data-f="zona"></select></div>
+        <button class="btn sm" id="mReset" type="button">Tutti</button>
+      </div>
+      <div class="mapwrap" id="mapwrap">
+        <div id="map" role="application" aria-label="Mappa dei campi"></div>
+        <div class="mapmsg" id="mapmsg" hidden></div>
+        <div class="zoom">
+          <button type="button" id="layerBtn">Satellite</button>
+          <button type="button" id="locate">Posizione</button>
+          <button type="button" id="zfit" aria-label="Mostra tutti i campi">Tutti</button>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div id="selcard"></div>
+      <div class="routebar"><a class="btn sm" id="routeBtn" target="_blank" rel="noopener" href="https://www.google.com/maps" hidden>Giro dei campi su Google Maps</a><span id="routeTxt"></span></div>
+      <div class="mapnote" id="mapnote"></div>
+    </section>
+
+    <section class="view" id="v-dati" aria-label="Dati" hidden>
+      <div class="sec">
+        <h2>Importa campi da Excel</h2>
+        <p>Scegli il file .xlsx con le colonne: ditta sementiera, tipo di coltura, codice, ettari, nome agricoltore, coordinate. Zona e telefono sono facoltativi.</p>
+        <label class="btn primary filebtn">Scegli il file Excel<input id="file" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+        <div id="importRes"></div>
+      </div>
+      <div class="sec">
+        <h2>Rilievi</h2>
+        <p id="relTxt"></p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn" id="exp" type="button">Esporta tutti i rilievi in Excel</button>
+          <button class="btn" id="expCsv" type="button" hidden>Copia tabella</button>
+        </div>
+      </div>
+      <div class="sec">
+        <h2>Salvataggio</h2>
+        <p id="syncTxt"></p>
+        <p>Campi, rilievi e foto restano salvati su questo telefono, dentro l'app. Nessun dato viene inviato online. Se cancelli i dati di Safari si perdono, quindi fai ogni tanto la copia di sicurezza qui sotto.</p>
+      </div>
+      <div class="sec">
+        <h2>Copia di sicurezza</h2>
+        <p>Salva campi e rilievi in un file e ripristinali quando vuoi, anche su un altro telefono. Le foto non sono incluse.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn" id="bkSave" type="button">Salva copia dei dati</button>
+          <label class="btn filebtn">Ripristina da copia<input id="bkFile" type="file" accept=".json,application/json"></label>
+        </div>
+        <div id="bkRes"></div>
+      </div>
+      <div class="sec">
+        <h2>Cancella dati</h2>
+        <p>Elimina tutti i campi e tutti i rilievi. Non si può annullare.</p>
+        <button class="btn danger" id="wipe" type="button">Cancella tutto</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs" role="tablist" aria-label="Sezioni">
+    <button type="button" role="tab" data-tab="campi" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Campi</button>
+    <button type="button" role="tab" data-tab="mappa" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>Mappa</button>
+    <button type="button" role="tab" data-tab="dati" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5z"/><path d="M14 4v5h5M8 14h8M8 17.5h8"/></svg>Dati</button>
+  </nav>
+</div>
+
+<div id="detail" hidden role="dialog" aria-modal="true" aria-label="Rilievo campo">
+  <div class="dhead">
+    <button class="back" id="back" type="button" aria-label="Torna all'elenco">&#8249;</button>
+    <div style="min-width:0"><div class="t" id="dCode"></div><div class="s" id="dSub"></div></div>
+  </div>
+  <div class="dbody" id="dbody"></div>
+  <div class="dfoot">
+    <button class="btn primary" id="pdf" type="button" style="grid-column:1 / -1">Relazione PDF con foto</button>
+    <button class="btn" id="waPhotos" type="button" style="grid-column:1 / -1" hidden>Foto + testo su WhatsApp</button>
+    <a class="btn" id="wa" href="https://wa.me/" target="_blank" rel="noopener">Solo testo su WhatsApp</a>
+    <button class="btn" id="copy" type="button">Copia</button>
+  </div>
+</div>
+<div id="viewer" hidden role="dialog" aria-modal="true" aria-label="Foto">
+  <div class="vtop"><span id="vInfo"></span><button class="btn sm" id="vClose" type="button">Chiudi</button></div>
+  <div class="vimg"><img id="vImg" alt="Foto del campo"></div>
+  <div class="vbar"><button class="btn" id="vSave" type="button">Salva o condividi</button><button class="btn danger" id="vDel" type="button">Elimina</button></div>
+</div>
+<div id="sendSheet" hidden role="dialog" aria-modal="true" aria-label="Crea la relazione con foto">
+  <div class="sheet">
+    <h3>Relazione PDF con foto</h3>
+    <p id="sendTxt"></p>
+    <label class="btn primary filebtn">Scegli le foto dal rullino<input id="fotoSend" type="file" accept="image/*" multiple></label>
+    <button class="btn" id="sendNow" type="button"></button>
+    <button class="btn" id="sendCancel" type="button">Annulla</button>
+    <p class="hint">Le foto scattate con "Scatta foto" dentro la finestra del rullino non finiscono nel rullino. Per averle anche lì, scattale con l'app Fotocamera e poi sceglile da qui.</p>
+  </div>
+</div>
+<div id="fileSheet" hidden role="dialog" aria-modal="true" aria-label="File pronto">
+  <div class="sheet">
+    <h3 id="fsTitle">File pronto</h3>
+    <p class="mono" id="fsName"></p>
+    <button class="btn primary" id="fsShare" type="button" hidden>Condividi (WhatsApp, Mail, File)</button>
+    <a class="btn" id="fsOpen" target="_blank" rel="noopener">Apri</a>
+    <a class="btn" id="fsDown">Scarica</a>
+    <button class="btn" id="fsClose" type="button">Chiudi</button>
+    <p class="hint">Con Condividi si apre il menu del telefono: scegli WhatsApp e poi il contatto, il file viene allegato.</p>
+  </div>
+</div>
+<div id="toast" hidden role="status"></div>
+
+<script src="lib/leaflet/leaflet.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s)};
+var $$=function(s){return Array.prototype.slice.call(document.querySelectorAll(s))};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')}
+function fmtHa(n){return Number(n).toLocaleString('it-IT',{minimumFractionDigits:0,maximumFractionDigits:2})}
+function pad(n){return n<10?'0'+n:''+n}
+function todayISO(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function isoDaysAgo(n){var d=new Date();d.setDate(d.getDate()-n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function fmtDate(iso){if(!iso)return '';var p=iso.split('-');return p[2]+'/'+p[1]+'/'+p[0]}
+function shortDate(iso){if(!iso)return '';var p=iso.split('-');return p[2]+'/'+p[1]}
+
+var LS_KEY='rilieviSeme.v1';
+/* S.rilievi[idCampo] = elenco di rilievi (uno per visita). S.rts[idCampo] = ultima modifica, serve alla copia online. */
+var S={campi:[],rilievi:{},rts:{},demo:false,campiTs:0,tab:'campi',f:{q:'',coltura:'',zona:'',ditta:'',stato:''},sel:null};
+var D=null;                 /* scheda aperta: {c, r} */
+var lastImport=null;
+var PALETTE=['#2E8B57','#D9A400','#C2512E','#3F7FBF','#8A5CC2','#C24B8B','#6E8F1A','#00899A'];
+
+/* ---------- Dati di esempio (segnati come tali) ---------- */
+function demoData(){
+  var rows=[
+   ['Sementi Alfa','Mais','M-0412',4.2,'Azienda esempio 1','43.4906, 13.4789','Osimo'],
+   ['Sementi Alfa','Mais','M-0415',3.6,'Azienda esempio 2','43.4701, 13.4660','Osimo'],
+   ['Sementi Alfa','Girasole','G-0107',2.8,'Azienda esempio 3','43.5222, 13.2431','Jesi'],
+   ['Sementi Beta','Erba medica','EM-221',6.5,'Azienda esempio 4','43.4318, 13.3578','Filottrano'],
+   ['Sementi Beta','Soia','S-0359',3.1,'Azienda esempio 5','43.4655, 13.5491','Castelfidardo'],
+   ['Sementi Beta','Soia','S-0362',5.0,'Azienda esempio 6','43.4771, 13.5322','Castelfidardo'],
+   ['Sementi Gamma','Girasole','G-0111',4.4,'Azienda esempio 7','43.5273, 13.5518','Camerano'],
+   ['Sementi Gamma','Cipolla','C-0072',1.9,'Azienda esempio 8','43.5149, 13.4262','Offagna'],
+   ['Sementi Alfa','Mais','M-0430',7.2,'Azienda esempio 9','43.4992, 13.3697','Polverigi'],
+   ['Sementi Gamma','Erba medica','EM-230',8.0,'Azienda esempio 10','43.4023, 13.5499','Recanati'],
+   ['Sementi Beta','Mais','M-0441',3.3,'Azienda esempio 11','43.4400, 13.6070','Loreto'],
+   ['Sementi Gamma','Girasole','G-0120',2.5,'Azienda esempio 12','43.3836, 13.4398','Montecassiano']
+  ];
+  var campi=rows.map(function(r){var p=parseCoord(r[5]);return {id:r[2].replace(/[^A-Za-z0-9_\-.~:@+]/g,'_'),ditta:r[0],coltura:r[1],codice:r[2],ettari:r[3],agricoltore:r[4],zona:r[6],lat:p.lat,lon:p.lon,telefono:''}});
+  var d=todayISO(),d0=isoDaysAgo(14);
+  function mk(rid,date,o){return Object.assign({rid:rid,ts:1,date:date,stato:'',fallanze:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:''},o)}
+  var ril={};
+  ril['M-0412']=[mk('r1',d0,{stato:'completo',infest:'no',malattie:'no',insetti:'no',note:'Emergenza regolare.'}),
+                 mk('r2',d,{stato:'disforme',fallanze:'12',infest:'si',infTipi:['Graminacee'],malattie:'no',insetti:'no',note:'Emergenza irregolare nella parte bassa del campo.'})];
+  ril['G-0107']=[mk('r1',d,{stato:'completo',infest:'no',malattie:'no',insetti:'no'})];
+  ril['S-0359']=[mk('r1',d,{stato:'completo',infest:'si',infTipi:['Convolvolo'],malattie:'no',insetti:'si'})];
+  return {campi:campi,rilievi:ril};
+}
+
+/* ---------- Coordinate ---------- */
+function parseCoord(s){
+  if(s==null)return null; s=String(s).trim(); if(!s)return null;
+  var lat,lon,m=s.match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[;,\s]\s*(-?\d+(?:[.,]\d+)?)\s*$/);
+  if(m){lat=parseFloat(m[1].replace(',','.'));lon=parseFloat(m[2].replace(',','.'));}
+  else{
+    var n=s.match(/\d+(?:[.,]\d+)?/g);
+    if(n&&n.length===6){
+      var v=n.map(function(x){return parseFloat(x.replace(',','.'))});
+      lat=v[0]+v[1]/60+v[2]/3600; lon=v[3]+v[4]/60+v[5]/3600;
+      if(/S/i.test(s.split(/[EWO]/i)[0]||''))lat=-lat;
+      if(/[WO]\s*$/i.test(s.trim()))lon=-lon;
+    } else return null;
+  }
+  if(!isFinite(lat)||!isFinite(lon))return null;
+  if(Math.abs(lat)>90&&Math.abs(lon)<=90){var t=lat;lat=lon;lon=t;}
+  if(lat>=0&&lat<19&&lon>=35&&lon<=48){var t2=lat;lat=lon;lon=t2;}
+  if(Math.abs(lat)>90||Math.abs(lon)>180)return null;
+  return {lat:lat,lon:lon};
+}
+
+/* ---------- Salvataggio locale ---------- */
+function saveLocal(){
+  try{localStorage.setItem(LS_KEY,JSON.stringify({campi:S.campi,rilievi:S.rilievi,rts:S.rts,demo:S.demo,campiTs:S.campiTs}));}catch(e){}
+}
+/* Versione precedente: un solo rilievo per campo. Lo trasforma in un elenco con un rilievo. */
+function migrate(){
+  Object.keys(S.rilievi).forEach(function(id){
+    var v=S.rilievi[id];
+    if(Array.isArray(v)){v.forEach(function(r){if(!r.rid)r.rid=newRid()});if(!v.length)delete S.rilievi[id];}
+    else if(v&&typeof v==='object'){v.rid='r1';S.rilievi[id]=[v];}
+    else delete S.rilievi[id];
+  });
+}
+function loadLocal(){
+  try{
+    var j=localStorage.getItem(LS_KEY); if(!j)return false;
+    var o=JSON.parse(j); if(!o||!o.campi||!o.campi.length)return false;
+    S.campi=o.campi;S.rilievi=o.rilievi||{};S.rts=o.rts||{};S.demo=!!o.demo;S.campiTs=o.campiTs||0;migrate();return true;
+  }catch(e){return false}
+}
+
+/* ---------- Salvataggio online (facoltativo) ---------- */
+var coll=null,cloudQ=Promise.resolve(),timers={},syncState='local';
+function setSync(s){
+  syncState=s;
+  var dot=$('#dot');dot.className='dot '+(s==='ok'?'ok':s==='error'?'err':s==='syncing'?'busy':'');
+  var t={local:'Salvato su questo telefono.',syncing:'Sincronizzazione in corso.',ok:'Salvato su questo telefono e online.',error:'Salvato su questo telefono. La copia online non è riuscita, riproverà alla prossima modifica.'}[s];
+  var el=$('#syncTxt');if(el)el.textContent=t;
+  dot.setAttribute('aria-label',t);
+}
+function cloudJob(fn){
+  if(!coll)return;
+  setSync('syncing');
+  cloudQ=cloudQ.then(fn).then(function(){setSync('ok')}).catch(function(){setSync('error')});
+}
+function pushCampiNow(){
+  return coll.doc('meta').get().then(function(old){
+    var oldN=old.exists?((old.data()||{}).n||0):0;
+    var chunks=[];for(var i=0;i<S.campi.length;i+=80)chunks.push(S.campi.slice(i,i+80));
+    var p=Promise.resolve();
+    chunks.forEach(function(ch,i){p=p.then(function(){return coll.doc('c_'+i).set({items:JSON.parse(JSON.stringify(ch))})})});
+    for(var j=chunks.length;j<oldN;j++){(function(j){p=p.then(function(){return coll.doc('c_'+j).delete()})})(j);}
+    return p.then(function(){return coll.doc('meta').set({n:chunks.length,ts:S.campiTs,demo:S.demo})});
+  });
+}
+function queueRilievo(id){
+  if(!coll||S.demo)return;
+  clearTimeout(timers[id]);
+  timers[id]=setTimeout(function(){
+    cloudJob(function(){
+      return coll.doc('r_'+id).set({list:JSON.parse(JSON.stringify(reps(id))),ts:S.rts[id]||Date.now()});
+    });
+  },800);
+}
+function pullCloud(){
+  return coll.get().then(function(snap){
+    var docs={};snap.docs.forEach(function(d){docs[d.id]=JSON.parse(JSON.stringify(d.data()||{}))});
+    var meta=docs.meta,changed=false,metaTs=meta?(meta.ts||0):0,p=Promise.resolve();
+    if(meta&&metaTs>S.campiTs){
+      var items=[];for(var i=0;i<(meta.n||0);i++){var d=docs['c_'+i];if(d&&d.items)items=items.concat(d.items);}
+      S.campi=items;S.demo=!!meta.demo;S.campiTs=metaTs;changed=true;
+    }else if(S.campiTs>metaTs&&!S.demo){p=pushCampiNow();}
+    Object.keys(docs).forEach(function(k){
+      if(k.indexOf('r_')!==0)return;
+      var id=k.slice(2),cr=docs[k];
+      var rl=Array.isArray(cr.list)?cr.list:((cr.date||cr.stato)?[Object.assign({rid:'r1'},cr)]:[]);
+      var rts=cr.ts||0,lts=S.rts[id]||lastTs(id);
+      if(!S.rilievi[id]&&!rl.length)return;
+      if(!S.rilievi[id]||rts>lts){
+        if(rl.length)S.rilievi[id]=rl;else delete S.rilievi[id];
+        S.rts[id]=rts;changed=true;
+      }else if(lts>rts){queueRilievo(id);}
+    });
+    if(!S.demo){Object.keys(S.rilievi).forEach(function(id){if(!docs['r_'+id])queueRilievo(id)});}
+    return p.then(function(){if(changed){saveLocal();renderAll(true);}});
+  });
+}
+function initCloud(){
+  try{
+    if(!(window.claude&&window.claude.use))return;
+    Promise.all([window.claude.use('db'),window.claude.use('user')]).then(function(a){
+      var db=a[0],user=a[1];if(!db||!user)return null;
+      return user.id().then(function(id){
+        if(!id)return null;
+        coll=db.collection('data/users/'+id);
+        setSync('syncing');
+        return pullCloud().then(function(){setSync('ok')});
+      });
+    }).catch(function(){setSync('error')});
+  }catch(e){}
+}
+
+/* ---------- Accesso ai dati ---------- */
+function byId(id){for(var i=0;i<S.campi.length;i++)if(S.campi[i].id===id)return S.campi[i];return null}
+function hasAnswer(r){return !!(r&&(r.stato||r.infest||r.malattie||r.insetti||(r.note&&r.note.trim())||(r.infTipi&&r.infTipi.length)))}
+function newRid(){return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
+function reps(id){var a=S.rilievi[id];return Array.isArray(a)?a:[]}
+function sortedReps(id){return reps(id).slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'')||(a.ts||0)-(b.ts||0)})}
+function latest(id){var a=sortedReps(id);return a.length?a[a.length-1]:null}
+function lastTs(id){return reps(id).reduce(function(m,r){return Math.max(m,r.ts||0)},0)}
+function repDone(id,r){return hasAnswer(r)||!!FN[id+'|'+(r.rid||'r1')]}
+function isDone(id){var y=String(new Date().getFullYear());return reps(id).some(function(r){return repDone(id,r)&&(r.date||'').slice(0,4)===y})}
+function hasCoord(c){return typeof c.lat==='number'&&typeof c.lon==='number'}
+function uniq(key){
+  var m={};S.campi.forEach(function(c){if(c[key])m[c[key]]=1});
+  return Object.keys(m).sort(function(a,b){return a.localeCompare(b,'it')});
+}
+function cropColor(name){var u=uniq('coltura');var i=u.indexOf(name);return PALETTE[(i<0?0:i)%PALETTE.length]}
+function visible(){
+  var f=S.f,q=norm(f.q);
+  return S.campi.filter(function(c){
+    if(f.coltura&&c.coltura!==f.coltura)return false;
+    if(f.zona&&c.zona!==f.zona)return false;
+    if(f.ditta&&c.ditta!==f.ditta)return false;
+    if(f.stato==='todo'&&isDone(c.id))return false;
+    if(f.stato==='done'&&!isDone(c.id))return false;
+    if(q&&norm([c.codice,c.agricoltore,c.ditta,c.coltura,c.zona].join(' ')).indexOf(q)<0)return false;
+    return true;
+  }).sort(function(a,b){return (a.zona||'').localeCompare(b.zona||'','it')||String(a.codice).localeCompare(String(b.codice),'it',{numeric:true})});
+}
+function anyFilter(){var f=S.f;return !!(f.q||f.coltura||f.zona||f.ditta||f.stato)}
+function flagsOf(r){
+  var o=[];if(!r)return o;
+  if(r.stato==='disforme')o.push('Disforme'+(r.fallanze!==''&&r.fallanze!=null?' '+r.fallanze+'%':''));
+  if(r.infest==='si')o.push('Infestanti'+(r.infTipi&&r.infTipi.length?': '+r.infTipi.join(', ').toLowerCase():''));
+  if(r.malattie==='si')o.push('Malattie');
+  if(r.insetti==='si')o.push('Insetti');
+  return o;
+}
+
+/* ---------- Elenco e filtri ---------- */
+function renderFilters(){
+  var defs={coltura:'Tutte',zona:'Tutte',ditta:'Tutte'};
+  $$('select[data-f]').forEach(function(sel){
+    var k=sel.dataset.f,vals=uniq(k);
+    if(S.f[k]&&vals.indexOf(S.f[k])<0)S.f[k]='';
+    sel.innerHTML='<option value="">'+defs[k]+'</option>'+vals.map(function(v){return '<option value="'+esc(v)+'">'+esc(v)+'</option>'}).join('');
+    sel.value=S.f[k];
+  });
+  $$('[data-wrap]').forEach(function(w){w.hidden=uniq(w.dataset.wrap).length<2});
+  $$('.stato button').forEach(function(b){b.setAttribute('aria-pressed',String((b.dataset.stato||'')===S.f.stato))});
+}
+function renderList(){
+  var vis=visible(),ha=0,done=0;
+  vis.forEach(function(c){ha+=c.ettari||0;if(isDone(c.id))done++});
+  var total=S.campi.length;
+  $('#sumTxt').textContent=total?(vis.length+(vis.length!==total?' di '+total:'')+' campi · '+fmtHa(ha)+' ha · '+done+' rilevati'):'';
+  $('#hdSub').textContent=S.tab==='campi'&&total?(total+' campi · '+fmtHa(S.campi.reduce(function(a,c){return a+(c.ettari||0)},0))+' ha'):$('#hdSub').textContent;
+  $('#resetF').hidden=!anyFilter();
+  $('#demoBanner').hidden=!S.demo;
+  var el=$('#list');
+  if(!total){el.innerHTML='<div class="empty"><b>Nessun campo</b>Apri la scheda Dati e importa il file Excel.</div>';return;}
+  if(!vis.length){el.innerHTML='<div class="empty"><b>Nessun campo con questi filtri</b>Cambia i filtri oppure azzerali.</div>';return;}
+  el.innerHTML=vis.map(function(c){
+    var all=sortedReps(c.id).filter(function(x){return repDone(c.id,x)}),lt=all.length?all[all.length-1]:null,done=isDone(c.id),fl=done&&lt?flagsOf(lt):[];
+    var yr=String(new Date().getFullYear());
+    return '<button type="button" class="row" data-open="'+esc(c.id)+'">'
+      +'<span class="code"><span class="sw" style="background:'+cropColor(c.coltura)+'"></span>'+esc(c.codice)+'</span>'
+      +'<span class="main"><div class="who">'+esc(c.agricoltore||'Senza nome')+'</div>'
+      +'<div class="meta">'+esc([c.coltura,c.ditta,c.zona,FT[c.id]?FT[c.id]+' foto':''].filter(Boolean).join(' · '))+'</div></span>'
+      +'<span class="side"><span class="ha">'+(c.ettari?fmtHa(c.ettari)+' ha':'')+'</span>'
+      +(done?'<span class="pill done">Fatto '+esc(shortDate(lt.date))+'</span>':'<span class="pill">Da fare</span>')+'</span>'
+      +(all.length?'<span class="rchips"><span class="rcount">'+all.length+(all.length===1?' rilievo':' rilievi')+'</span>'
+        +all.slice(-6).map(function(x){var bad=flagsOf(x).length>0;return '<span class="rchip'+(bad?' bad':'')+'">'+esc((x.date||'').slice(0,4)===yr?shortDate(x.date):fmtDate(x.date))+'</span>'}).join('')
+        +(all.length>6?'<span class="rchip">+'+(all.length-6)+'</span>':'')+'</span>':'')
+      +(fl.length?'<span class="flags">'+fl.map(function(f){return '<span class="flag">'+esc(f)+'</span>'}).join('')+'</span>':'')
+      +'</button>';
+  }).join('');
+}
+
+/* ---------- Mappa (Leaflet: strade OpenStreetMap, satellite Esri) ---------- */
+var M={fitted:false,cos:.73};
+var LM={map:null,markers:null,sat:false,osm:null,esri:null,me:null};
+try{LM.sat=localStorage.getItem('rilieviSeme.sat')==='1'}catch(e){}
+function mapLibOk(){return !!window.L}
+function initMap(){
+  if(LM.map||!mapLibOk())return;
+  LM.map=L.map('map',{zoomControl:true,attributionControl:true}).setView([43.5,13.4],10);
+  LM.osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'});
+  LM.esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Immagini &copy; Esri'});
+  (LM.sat?LM.esri:LM.osm).addTo(LM.map);
+  LM.markers=L.layerGroup().addTo(LM.map);
+  LM.map.on('zoomend',function(){if(S.tab==='mappa')renderMap()});
+  setLayerLabel();
+}
+function setLayerLabel(){var b=$('#layerBtn');if(b)b.textContent=LM.sat?'Strade':'Satellite'}
+function toggleLayer(){
+  if(!LM.map)return;
+  LM.map.removeLayer(LM.sat?LM.esri:LM.osm);
+  LM.sat=!LM.sat;
+  (LM.sat?LM.esri:LM.osm).addTo(LM.map);
+  try{localStorage.setItem('rilieviSeme.sat',LM.sat?'1':'0')}catch(e){}
+  setLayerLabel();
+}
+function locateMe(){
+  if(!LM.map)return;
+  if(!navigator.geolocation){toast('La posizione non è disponibile su questo dispositivo');return}
+  toast('Cerco la tua posizione…');
+  navigator.geolocation.getCurrentPosition(function(p){
+    var ll=[p.coords.latitude,p.coords.longitude];
+    if(LM.me)LM.map.removeLayer(LM.me);
+    LM.me=L.circleMarker(ll,{radius:9,color:'#fff',weight:3,fillColor:'#1769E0',fillOpacity:1,interactive:false}).addTo(LM.map);
+    LM.map.setView(ll,Math.max(LM.map.getZoom(),14));
+  },function(){toast('Non riesco a leggere la posizione. Controlla il permesso per Safari.')},{enableHighAccuracy:true,timeout:12000,maximumAge:30000});
+}
+function renderMap(){
+  if(S.tab!=='mappa')return;
+  var all=visible(),pts=all.filter(hasCoord),noCoord=all.length-pts.length;
+  var msg=$('#mapmsg');
+  if(!mapLibOk()){
+    msg.hidden=false;msg.textContent='La mappa non si è caricata. Riapri l\'app con la connessione attiva.';
+  } else {
+    msg.hidden=true;initMap();
+    LM.map.invalidateSize();
+    LM.markers.clearLayers();
+    var z=LM.map.getZoom(),labels=z>=13||pts.length<=12,bounds=[];
+    pts.forEach(function(c){
+      var col=cropColor(c.coltura),done=isDone(c.id),lt=latest(c.id),bad=done&&!!lt&&flagsOf(lt).length>0,sel=S.sel===c.id,ll=[c.lat,c.lon];
+      bounds.push(ll);
+      if(sel)L.circleMarker(ll,{radius:19,color:'#FFD400',weight:4,fill:false,interactive:false}).addTo(LM.markers);
+      if(bad)L.circleMarker(ll,{radius:15,color:'#E5352B',weight:4,fill:false,interactive:false}).addTo(LM.markers);
+      var m=L.circleMarker(ll,done?{radius:10,color:'#ffffff',weight:3,fillColor:col,fillOpacity:1}:{radius:10,color:col,weight:5,fillColor:'#ffffff',fillOpacity:1});
+      m.on('click',function(){S.sel=c.id;renderMap()});
+      if(labels)m.bindTooltip(c.codice,{permanent:true,direction:'right',offset:[12,0],className:'mlabel'});
+      m.addTo(LM.markers);
+    });
+    if(!M.fitted&&bounds.length){
+      M.fitted=true;
+      if(bounds.length===1)LM.map.setView(bounds[0],15);
+      else LM.map.fitBounds(bounds,{padding:[44,44],maxZoom:16});
+    }
+    var cr=[];pts.forEach(function(c){if(cr.indexOf(c.coltura)<0)cr.push(c.coltura)});
+    $('#legend').innerHTML=cr.sort().map(function(n){return '<span><i class="sw" style="background:'+cropColor(n)+'"></i>'+esc(n)+'</span>'}).join('')
+      +(pts.length?'<span>Pieno: rilevato</span><span>Anello rosso: da controllare</span>':'');
+  }
+  if(pts.length){var s=0;pts.forEach(function(p){s+=p.lat});M.cos=Math.cos(s/pts.length*Math.PI/180)}
+  var sc=S.sel&&byId(S.sel);
+  if(sc&&visible().some(function(c){return c.id===sc.id})){
+    var lt1=latest(sc.id),fl=isDone(sc.id)&&lt1?flagsOf(lt1):[];
+    $('#selcard').innerHTML='<div class="selcard"><div style="min-width:0"><div class="t"><span class="mono">'+esc(sc.codice)+'</span> · '+esc(sc.agricoltore||'Senza nome')+'</div>'
+      +'<div class="m">'+esc([sc.coltura,sc.ditta,sc.ettari?fmtHa(sc.ettari)+' ha':'',sc.zona].filter(Boolean).join(' · '))+(fl.length?' · '+esc(fl.join(', ')):'')+'</div></div>'
+      +'<button class="btn primary sm" type="button" data-open="'+esc(sc.id)+'">Rilievo</button></div>';
+  } else {S.sel=null;$('#selcard').innerHTML='';}
+  updateRoute(pts);
+  $('#mapnote').textContent=(noCoord?noCoord+' campi senza coordinate non compaiono sulla mappa. ':'')+'Mappa: OpenStreetMap e immagini Esri. Le zone già viste restano disponibili anche senza segnale.';
+}
+function updateRoute(pts){
+  var a=$('#routeBtn'),t=$('#routeTxt');
+  if(!pts.length){a.hidden=true;t.textContent='';return;}
+  if(pts.length>9){a.hidden=true;t.textContent='Con '+pts.length+' campi il giro è troppo lungo per Google Maps (massimo 9 tappe). Filtra per zona o coltura.';return;}
+  var left=pts.slice(),order=[left.shift()];
+  while(left.length){
+    var last=order[order.length-1],bi=0,bd=1e9;
+    left.forEach(function(p,i){var d=Math.hypot((p.lat-last.lat),(p.lon-last.lon)*M.cos);if(d<bd){bd=d;bi=i}});
+    order.push(left.splice(bi,1)[0]);
+  }
+  var dest=order[order.length-1],way=order.slice(0,-1).map(function(p){return p.lat+','+p.lon}).join('|');
+  a.href='https://www.google.com/maps/dir/?api=1&travelmode=driving&destination='+dest.lat+','+dest.lon+(way?'&waypoints='+encodeURIComponent(way):'');
+  a.hidden=false;
+  t.textContent=order.length+(order.length===1?' tappa':' tappe')+', in ordine di vicinanza partendo da '+order[0].codice+'. Parte dalla tua posizione.';
+}
+function queueMap(){renderMap()}
+
+/* ---------- Scheda campo ---------- */
+var WEEDS=['Graminacee','Dicotiledoni','Sorghetta','Convolvolo','Amaranto','Chenopodio','Abutilon','Cuscuta'];
+function blankR(c){return {ts:0,date:todayISO(),stato:'',fallanze:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:c.telefono||''}}
+function seg(k,a,b,val){
+  function one(o){return '<label class="'+o.t+'"><input type="radio" name="'+k+'" data-k="'+k+'" value="'+o.v+'"'+(val===o.v?' checked':'')+'><span>'+o.l+'</span></label>'}
+  return '<div class="seg" role="radiogroup">'+one(a)+one(b)+'</div>';
+}
+function openDetail(id,rid){
+  var c=byId(id);if(!c)return;
+  var list=sortedReps(id),r=null;
+  if(rid==='new'){
+    r=blankR(c);r.rid=list.length?newRid():'r1';
+    if(list.length&&list[list.length-1].tel)r.tel=list[list.length-1].tel;
+  } else if(rid){
+    for(var i=0;i<list.length;i++)if(list[i].rid===rid)r=JSON.parse(JSON.stringify(list[i]));
+  }
+  if(!r&&list.length)r=JSON.parse(JSON.stringify(list[list.length-1]));
+  if(!r){r=blankR(c);r.rid='r1';}
+  if(!r.infTipi)r.infTipi=[];
+  D={c:c,r:r};
+  $('#dCode').textContent=c.codice;
+  $('#dSub').textContent=[c.coltura,c.agricoltore].filter(Boolean).join(' · ');
+  var nav='';
+  if(hasCoord(c)){
+    nav='<div class="nav"><a class="btn sm" target="_blank" rel="noopener" href="https://maps.apple.com/?daddr='+c.lat+','+c.lon+'&dirflg=d">Indicazioni con Mappe</a>'
+       +'<a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination='+c.lat+','+c.lon+'">Google Maps</a></div>';
+  }
+  var facts=[['Ditta',c.ditta],['Coltura',c.coltura],['Ettari',c.ettari?fmtHa(c.ettari)+' ha':''],['Agricoltore',c.agricoltore],['Zona',c.zona],['Coordinate',hasCoord(c)?c.lat.toFixed(5)+', '+c.lon.toFixed(5):'']].filter(function(x){return x[1]});
+  $('#dbody').innerHTML=
+    '<dl class="facts">'+facts.map(function(f){return '<div><dt>'+f[0]+'</dt><dd'+(f[0]==='Coordinate'?' class="mono"':'')+'>'+esc(f[1])+'</dd></div>'}).join('')+'</dl>'+nav
+    +'<div class="q"><div class="fotohead"><h3>Rilievi del campo</h3><button class="btn sm" id="newRep" type="button">Nuovo rilievo</button></div>'
+      +'<div class="hist" id="hist"></div>'
+      +'<div class="field"><label class="lbl" for="rdate">Data di questo rilievo</label><input class="in" id="rdate" data-k="date" type="date" style="max-width:220px" value="'+esc(r.date)+'"></div></div>'
+    +'<div class="q"><h3>Investimento</h3>'+seg('stato',{v:'completo',l:'Campo completo',t:'good'},{v:'disforme',l:'Campo disforme',t:'bad'},r.stato)
+      +'<div class="field" id="bl-fall" hidden><label class="lbl" for="fallanze">Percentuale di fallanze</label><div class="inwrap"><input class="in" id="fallanze" data-k="fallanze" type="number" inputmode="decimal" min="0" max="100" step="1" value="'+esc(r.fallanze)+'"><span>%</span></div></div></div>'
+    +'<div class="q"><h3>Infestanti</h3>'+seg('infest',{v:'no',l:'Campo pulito',t:'good'},{v:'si',l:'Con infestanti',t:'bad'},r.infest)
+      +'<div class="field" id="bl-inf" hidden><span class="lbl">Tipologia</span><div class="chips">'+WEEDS.map(function(w){return '<label class="chip"><input type="checkbox" data-k="infTipi" value="'+w+'"'+(r.infTipi.indexOf(w)>=0?' checked':'')+'><span>'+w+'</span></label>'}).join('')+'</div>'
+      +'<label class="lbl" for="infNote">Altre infestanti</label><input class="in" id="infNote" data-k="infNote" type="text" value="'+esc(r.infNote)+'"></div></div>'
+    +'<div class="q"><h3>Malattie</h3>'+seg('malattie',{v:'no',l:'No',t:'good'},{v:'si',l:'Sì',t:'bad'},r.malattie)
+      +'<div class="field" id="bl-mal" hidden><label class="lbl" for="malNote">Quali (facoltativo)</label><input class="in" id="malNote" data-k="malNote" type="text" value="'+esc(r.malNote)+'"></div></div>'
+    +'<div class="q"><h3>Insetti</h3>'+seg('insetti',{v:'no',l:'No',t:'good'},{v:'si',l:'Sì',t:'bad'},r.insetti)
+      +'<div class="field" id="bl-ins" hidden><label class="lbl" for="insNote">Quali (facoltativo)</label><input class="in" id="insNote" data-k="insNote" type="text" value="'+esc(r.insNote)+'"></div></div>'
+    +'<div class="q"><h3>Commenti sulla coltura</h3><textarea class="ta" id="note" data-k="note" rows="4" placeholder="Stadio, uniformità, prossimi interventi">'+esc(r.note)+'</textarea></div>'
+    +'<div class="q"><div class="fotohead"><h3>Foto</h3><span id="fotoN"></span></div>'
+      +'<label class="btn filebtn">Scatta o scegli foto<input id="foto" type="file" accept="image/*" multiple></label>'
+      +'<div class="thumbs" id="thumbs"></div>'
+      +'<button class="btn sm" id="zipBtn" type="button" hidden>Salva tutte le foto (zip)</button>'
+      +'<p class="hint">Aggiungi quante foto vuoi. Restano su questo telefono. Con il pulsante "Relazione PDF con foto" in basso finiscono tutte dentro un unico documento insieme al testo.</p></div>'
+    +'<div class="q"><h3>Relazione</h3><div class="field"><label class="lbl" for="tel">Numero WhatsApp (facoltativo)</label><input class="in" id="tel" data-k="tel" type="tel" inputmode="tel" placeholder="Es. 333 1234567" value="'+esc(r.tel)+'"></div>'
+      +'<div class="report" id="report"></div><p class="hint">Il numero vale per "Solo testo su WhatsApp". Senza numero, WhatsApp ti fa scegliere il contatto. Il PDF con foto si condivide dal menu che si apre dopo averlo creato.</p></div>'
+    +'<div class="reset"><button class="btn danger sm" id="resetR" type="button">Elimina questo rilievo</button><p class="hint">Elimina anche le foto di questo rilievo. Gli altri rilievi del campo restano.</p></div>';
+  syncDetail();renderHist();
+  $('#detail').hidden=false;$('#dbody').scrollTop=0;
+  loadThumbs();
+}
+function renderHist(){
+  var el=$('#hist');if(!el||!D)return;
+  var id=D.c.id,list=sortedReps(id),yr=String(new Date().getFullYear()),stored=list.some(function(x){return x.rid===D.r.rid});
+  var h=list.map(function(x,i){
+    var bad=flagsOf(x).length>0,sel=x.rid===D.r.rid;
+    var lab=(x.date||'').slice(0,4)===yr?shortDate(x.date):fmtDate(x.date);
+    return '<button type="button" class="hbtn'+(bad?' bad':'')+'" data-rep="'+esc(x.rid)+'" aria-pressed="'+sel+'" aria-label="Rilievo '+(i+1)+' del '+esc(fmtDate(x.date))+'">'+esc(lab)+'</button>';
+  }).join('');
+  if(!stored)h+='<button type="button" class="hbtn draft" aria-pressed="true" disabled>Nuovo</button>';
+  el.innerHTML=h||'';
+}
+function closeDetail(){
+  $('#detail').hidden=true;D=null;
+  thumbUrls.forEach(function(u){URL.revokeObjectURL(u)});thumbUrls=[];
+  renderFilters();renderList();renderMap();
+}
+function buildReport(c,r){
+  var L=['*RILIEVO CAMPO*','Data: '+fmtDate(r.date),'Codice: '+c.codice+(c.coltura?' · '+c.coltura:'')];
+  if(c.ditta)L.push('Ditta: '+c.ditta);
+  if(c.agricoltore)L.push('Agricoltore: '+c.agricoltore);
+  if(c.ettari)L.push('Superficie: '+fmtHa(c.ettari)+' ha');
+  if(c.zona)L.push('Zona: '+c.zona);
+  L.push('');
+  var any=false;
+  if(r.stato==='completo'){L.push('Investimento: campo completo');any=true}
+  if(r.stato==='disforme'){var f=parseFloat(String(r.fallanze).replace(',','.'));L.push('Investimento: campo disforme'+(isFinite(f)?', fallanze '+f+'%':''));any=true}
+  if(r.infest==='no'){L.push('Infestanti: campo pulito');any=true}
+  if(r.infest==='si'){var t=(r.infTipi||[]).concat(r.infNote&&r.infNote.trim()?[r.infNote.trim()]:[]).join(', ');L.push('Infestanti: presenti'+(t?' ('+t+')':''));any=true}
+  if(r.malattie==='no'){L.push('Malattie: assenti');any=true}
+  if(r.malattie==='si'){L.push('Malattie: presenti'+(r.malNote&&r.malNote.trim()?' ('+r.malNote.trim()+')':''));any=true}
+  if(r.insetti==='no'){L.push('Insetti: assenti');any=true}
+  if(r.insetti==='si'){L.push('Insetti: presenti'+(r.insNote&&r.insNote.trim()?' ('+r.insNote.trim()+')':''));any=true}
+  var nf=FN[c.id+'|'+(r.rid||'r1')]||0;
+  if(nf){L.push('Foto scattate: '+nf);any=true}
+  if(r.note&&r.note.trim()){L.push('');L.push('Note: '+r.note.trim());any=true}
+  return any?L.join('\n'):'';
+}
+function waNumber(t){
+  var d=String(t||'').replace(/[^\d+]/g,'');
+  if(!d)return '';
+  if(d.indexOf('+')===0)return d.replace(/\D/g,'');
+  d=d.replace(/\D/g,'');
+  if(d.indexOf('00')===0)return d.slice(2);
+  if(d.length>=9&&d.length<=10&&d.charAt(0)==='3')return '39'+d;
+  return d;
+}
+function syncDetail(){
+  if(!D)return;var r=D.r;
+  $('#bl-fall').hidden=r.stato!=='disforme';
+  $('#bl-inf').hidden=r.infest!=='si';
+  $('#bl-mal').hidden=r.malattie!=='si';
+  $('#bl-ins').hidden=r.insetti!=='si';
+  var txt=buildReport(D.c,r);
+  $('#report').textContent=txt||'Compila il rilievo: la relazione compare qui.';
+  var wa=$('#wa');
+  wa.href='https://wa.me/'+waNumber(r.tel)+'?text='+encodeURIComponent(txt||'');
+  wa.setAttribute('aria-disabled',txt?'false':'true');
+}
+var saveT=null;
+function commitDetail(force){
+  if(!D)return;
+  var r=D.r,id=D.c.id,list=reps(id),idx=-1;
+  list.forEach(function(x,i){if(x.rid===r.rid)idx=i});
+  if(idx<0&&force!==true&&!hasAnswer(r))return;
+  r.ts=Date.now();
+  var copy=JSON.parse(JSON.stringify(r));
+  if(!Array.isArray(S.rilievi[id]))S.rilievi[id]=[];
+  if(idx<0)S.rilievi[id].push(copy);else S.rilievi[id][idx]=copy;
+  S.rts[id]=r.ts;
+  clearTimeout(saveT);saveT=setTimeout(function(){saveLocal()},250);
+  queueRilievo(id);
+  renderHist();
+}
+function onField(e){
+  var t=e.target,k=t.dataset&&t.dataset.k;if(!k||!D)return;
+  if(k==='date'&&!t.value)return;
+  if(t.type==='checkbox'){
+    var a=D.r[k],i=a.indexOf(t.value);
+    if(t.checked&&i<0)a.push(t.value);if(!t.checked&&i>=0)a.splice(i,1);
+  } else D.r[k]=t.value;
+  syncDetail();commitDetail();
+}
+
+/* ---------- Importazione Excel ---------- */
+var HEADS={
+  ditta:['dittasementiera','ditta','sementiera','dittasementi','casasementiera'],
+  coltura:['tipodicoltura','tipocoltura','coltura','specie','tipodicolture'],
+  codice:['codice','cod','codicecampo','codcampo','idcampo'],
+  ettari:['ettari','ha','superficie','sup','superficieha'],
+  agricoltore:['nomeagricoltore','agricoltore','nominativo','nome','intestatario'],
+  coordinate:['coordinate','coordinata','gps','posizione','coordinategps'],
+  lat:['latitudine','lat'],lon:['longitudine','lon','lng','long'],
+  zona:['zona','comune','localita','area','settore','zonadigiro'],
+  telefono:['telefono','tel','cellulare','whatsapp','numero','telefonoagricoltore']
+};
+var LABELS={ditta:'Ditta sementiera',coltura:'Tipo di coltura',codice:'Codice',ettari:'Ettari',agricoltore:'Nome agricoltore',coordinate:'Coordinate',lat:'Latitudine',lon:'Longitudine',zona:'Zona',telefono:'Telefono'};
+function nk(s){return norm(s).replace(/[^a-z0-9]/g,'')}
+function importRows(rows){
+  var keys=rows.length?Object.keys(rows[0]):[],map={};
+  Object.keys(HEADS).forEach(function(f){
+    for(var i=0;i<keys.length;i++){if(HEADS[f].indexOf(nk(keys[i]))>=0){map[f]=keys[i];break;}}
+  });
+  if(!map.codice&&!map.agricoltore&&!map.coltura)return {err:'Non trovo le colonne dei campi. Colonne lette: '+keys.join(', ')};
+  var canon={coltura:{},zona:{},ditta:{}};
+  function cn(f,v){v=String(v==null?'':v).replace(/\s+/g,' ').trim();if(!v)return '';var k=norm(v);if(!canon[f][k])canon[f][k]=v.charAt(0).toUpperCase()+v.slice(1);return canon[f][k]}
+  var seen={},campi=[],noCoord=0,renamed=0,skipped=0;
+  rows.forEach(function(row,i){
+    var g=function(f){return map[f]?row[map[f]]:''};
+    var cod=String(g('codice')==null?'':g('codice')).trim(),agr=String(g('agricoltore')||'').trim(),col=cn('coltura',g('coltura'));
+    if(!cod&&!agr&&!col){skipped++;return;}
+    if(!cod)cod='C'+(i+1);
+    var id=cod.replace(/[^A-Za-z0-9_\-.~:@+]/g,'_').slice(0,80);if(!id||id==='.'||id==='..')id='C'+(i+1);
+    if(seen[id]){var n=2;while(seen[id+'_'+n])n++;id=id+'_'+n;renamed++;}
+    seen[id]=1;
+    var p=null;
+    if(map.lat&&map.lon){var la=parseFloat(String(g('lat')).replace(',','.')),lo=parseFloat(String(g('lon')).replace(',','.'));if(isFinite(la)&&isFinite(lo))p=parseCoord(la+', '+lo);}
+    if(!p&&map.coordinate)p=parseCoord(g('coordinate'));
+    if(!p)noCoord++;
+    var ha=parseFloat(String(g('ettari')).replace(',','.'));
+    campi.push({id:id,ditta:cn('ditta',g('ditta')),coltura:col,codice:cod,ettari:isFinite(ha)?ha:0,agricoltore:agr,zona:cn('zona',g('zona')),lat:p?p.lat:null,lon:p?p.lon:null,telefono:String(g('telefono')||'').trim()});
+  });
+  if(!campi.length)return {err:'Il file non contiene righe con dati.'};
+  return {campi:campi,noCoord:noCoord,renamed:renamed,skipped:skipped,map:map};
+}
+function onFile(file){
+  if(!file)return;
+  if(!window.XLSX){lastImport={err:'La lettura del file Excel non è disponibile ora. Controlla la connessione e riapri la pagina.'};renderDati();return;}
+  file.arrayBuffer().then(function(buf){
+    var wb=XLSX.read(buf,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]];
+    var rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+    var res=importRows(rows);
+    if(res.err){lastImport={err:res.err};renderDati();return;}
+    if(S.demo){S.rilievi={};S.rts={};}
+    S.campi=res.campi;S.demo=false;S.campiTs=Date.now();S.sel=null;
+    S.f={q:'',coltura:'',zona:'',ditta:'',stato:''};$('#q').value='';M.fitted=false;
+    saveLocal();cloudJob(pushCampiNow);
+    lastImport=res;lastImport.n=res.campi.length;
+    renderAll();toast('Importati '+res.campi.length+' campi');
+  }).catch(function(){lastImport={err:'Non riesco a leggere questo file. Salvalo come .xlsx e riprova.'};renderDati();});
+}
+function renderDati(){
+  var nRep=exportRows().length,nCampi=S.campi.filter(function(c){return reps(c.id).some(function(r){return repDone(c.id,r)})}).length;
+  $('#relTxt').textContent=nRep?nRep+(nRep===1?' rilievo':' rilievi')+' su '+nCampi+(nCampi===1?' campo':' campi')+' (su '+S.campi.length+'). L\'Excel ha una riga per ogni rilievo, con la data.':'Nessun rilievo ancora. Compila la scheda di un campo dall\'elenco.';
+  $('#exp').disabled=!nRep;$('#exp').style.opacity=nRep?1:.5;
+  var el=$('#importRes'),r=lastImport;
+  if(!r){el.innerHTML=S.demo?'<div class="res"><b>Ora vedi dati di esempio.</b>Dopo l\'importazione compaiono i tuoi campi.</div>':'';}
+  else if(r.err){el.innerHTML='<div class="res err">'+esc(r.err)+'</div>';}
+  else{
+    var cols=Object.keys(LABELS).map(function(f){return '<span class="col'+(r.map[f]?' on':'')+'">'+LABELS[f]+(r.map[f]?'':' (assente)')+'</span>'}).join('');
+    el.innerHTML='<div class="res"><b>'+r.n+' campi importati.</b>'
+      +(r.noCoord?'<span>'+r.noCoord+' senza coordinate leggibili: restano nell\'elenco, non sulla mappa.</span>':'<span>Tutti i campi hanno le coordinate.</span>')
+      +(r.renamed?'<span>'+r.renamed+' codici ripetuti: aggiunto un numero in fondo.</span>':'')
+      +(r.skipped?'<span>'+r.skipped+' righe vuote ignorate.</span>':'')
+      +'<div class="cols" style="margin-top:6px">'+cols+'</div></div>';
+  }
+}
+function exportRows(){
+  var out=[];
+  S.campi.forEach(function(c){
+    var n=0;
+    sortedReps(c.id).forEach(function(r){
+      if(!repDone(c.id,r))return;
+      n++;
+      out.push({'Data rilievo':fmtDate(r.date),'Codice':c.codice,'Rilievo n.':n,'Ditta sementiera':c.ditta,'Coltura':c.coltura,'Agricoltore':c.agricoltore,'Zona':c.zona,'Ettari':c.ettari,
+        'Investimento':r.stato==='completo'?'Completo':r.stato==='disforme'?'Disforme':'','Fallanze %':r.stato==='disforme'?r.fallanze:'',
+        'Infestanti':r.infest==='no'?'Pulito':r.infest==='si'?'Presenti':'','Tipo infestanti':(r.infTipi||[]).concat(r.infNote?[r.infNote]:[]).join(', '),
+        'Malattie':r.malattie==='no'?'No':r.malattie==='si'?'Sì':'','Dettaglio malattie':r.malNote||'',
+        'Insetti':r.insetti==='no'?'No':r.insetti==='si'?'Sì':'','Dettaglio insetti':r.insNote||'','Commenti':r.note||'','Foto':FN[c.id+'|'+(r.rid||'r1')]||0});
+    });
+  });
+  return out;
+}
+function doExport(){
+  var rows=exportRows();if(!rows.length||!window.XLSX)return;
+  var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Rilievi');
+  saveBlob('Rilievi_'+todayISO()+'.xlsx',XLSX.write(wb,{type:'array',bookType:'xlsx'}));
+}
+function copyTable(){
+  var rows=exportRows();if(!rows.length)return;
+  var h=Object.keys(rows[0]);
+  var csv=[h.join(';')].concat(rows.map(function(r){return h.map(function(k){return '"'+String(r[k]==null?'':r[k]).replace(/"/g,'""')+'"'}).join(';')})).join('\n');
+  copyText(csv,'Tabella copiata');
+}
+function copyText(t,msg){
+  function fb(){toast('Copia non riuscita: tieni premuto sul testo e copia')}
+  try{navigator.clipboard.writeText(t).then(function(){toast(msg||'Copiato')},fb)}catch(e){fb()}
+}
+
+/* ---------- Foto (restano nel telefono, in IndexedDB) ---------- */
+var idb=null,memFoto=[],FN={},FT={},thumbUrls=[],viewing=null,memWarned=false,vArm=null;
+function idbOpen(done){
+  try{
+    var rq=indexedDB.open('rilieviSeme',1);
+    rq.onupgradeneeded=function(){var st=rq.result.createObjectStore('foto',{keyPath:'id'});st.createIndex('campo','campo')};
+    rq.onsuccess=function(){idb=rq.result;done()};
+    rq.onerror=function(){done()};rq.onblocked=function(){done()};
+  }catch(e){done()}
+}
+function fotoAll(cb){
+  if(!idb)return cb(memFoto.slice());
+  try{var rq=idb.transaction('foto','readonly').objectStore('foto').getAll();rq.onsuccess=function(){cb(rq.result||[])};rq.onerror=function(){cb([])}}catch(e){cb([])}
+}
+function fotoByCampo(id,cb){
+  if(!idb)return cb(memFoto.filter(function(f){return f.campo===id}));
+  try{var rq=idb.transaction('foto','readonly').objectStore('foto').index('campo').getAll(id);rq.onsuccess=function(){cb(rq.result||[])};rq.onerror=function(){cb([])}}catch(e){cb([])}
+}
+function fotoPut(rec,cb){
+  if(!idb){memFoto.push(rec);return cb(true)}
+  try{var tx=idb.transaction('foto','readwrite');tx.objectStore('foto').put(rec);tx.oncomplete=function(){cb(true)};tx.onerror=function(){cb(false)};tx.onabort=function(){cb(false)}}catch(e){cb(false)}
+}
+function fotoDelete(id,cb){
+  if(!idb){memFoto=memFoto.filter(function(f){return f.id!==id});return cb()}
+  try{var tx=idb.transaction('foto','readwrite');tx.objectStore('foto').delete(id);tx.oncomplete=function(){cb()};tx.onerror=function(){cb()};tx.onabort=function(){cb()}}catch(e){cb()}
+}
+function fotoClear(cb){
+  if(!idb){memFoto=[];return cb()}
+  try{var tx=idb.transaction('foto','readwrite');tx.objectStore('foto').clear();tx.oncomplete=function(){cb()};tx.onerror=function(){cb()};tx.onabort=function(){cb()}}catch(e){cb()}
+}
+/* Le foto sono legate a un rilievo (rid). Quelle scattate prima dello storico appartengono al rilievo 'r1'. */
+function ridOf(f){return f.rid||'r1'}
+function fotoByReport(campo,rid,cb){fotoByCampo(campo,function(a){cb(a.filter(function(f){return ridOf(f)===rid}))})}
+function deleteReportPhotos(campo,rid,cb){
+  fotoByReport(campo,rid,function(a){
+    var i=0;(function next(){if(i>=a.length)return cb();fotoDelete(a[i++].id,next)})();
+  });
+}
+function countFoto(cb){fotoAll(function(a){FN={};FT={};a.forEach(function(f){var k=f.campo+'|'+ridOf(f);FN[k]=(FN[k]||0)+1;FT[f.campo]=(FT[f.campo]||0)+1});if(cb)cb()})}
+function shrink(file,cb){
+  var url=URL.createObjectURL(file),im=new Image();
+  im.onload=function(){
+    var s=Math.min(1,1600/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');
+    c.width=Math.max(1,Math.round(im.naturalWidth*s));c.height=Math.max(1,Math.round(im.naturalHeight*s));
+    c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    c.toBlob(function(b){URL.revokeObjectURL(url);cb(b)},'image/jpeg',0.78);
+  };
+  im.onerror=function(){URL.revokeObjectURL(url);cb(null)};
+  im.src=url;
+}
+function loadThumbs(){
+  if(!D)return;var cid=D.c.id,crid=D.r.rid;
+  fotoByReport(cid,crid,function(arr){
+    if(!D||D.c.id!==cid||D.r.rid!==crid)return;
+    var el=$('#thumbs');if(!el)return;
+    thumbUrls.forEach(function(u){URL.revokeObjectURL(u)});thumbUrls=[];
+    arr.sort(function(a,b){return a.ts-b.ts});
+    el.innerHTML=arr.map(function(f,i){
+      var u=URL.createObjectURL(f.blob);thumbUrls.push(u);
+      return '<button type="button" class="thumb" data-foto="'+esc(f.id)+'" aria-label="Foto '+(i+1)+'"><img src="'+u+'" alt="Foto '+(i+1)+' del campo"></button>';
+    }).join('');
+    $('#fotoN').textContent=arr.length?arr.length+' foto':'Nessuna foto';
+    $('#zipBtn').hidden=arr.length<2;
+    D.fotos=arr;
+    try{
+      D.files=arr.map(function(f,i){return new File([f.blob],fotoName(D.c,i+1),{type:'image/jpeg'})});
+      var wp=$('#waPhotos');
+      if(wp)wp.hidden=!(arr.length&&navigator.canShare&&navigator.canShare({files:D.files}));
+    }catch(e){}
+  });
+}
+function afterFotoChange(cb){
+  countFoto(function(){loadThumbs();syncDetail();renderList();if(cb)cb()});
+}
+function addPhotos(files,done){
+  if(!files.length||!D)return;
+  var cid=D.c.id,crid=D.r.rid,i=0,saved=0,failed=0;
+  commitDetail(true);
+  if(!idb&&!memWarned){memWarned=true;toast('Su questo telefono le foto restano solo finché la pagina è aperta')}
+  toast('Salvo '+files.length+(files.length===1?' foto…':' foto…'));
+  (function next(){
+    if(i>=files.length){afterFotoChange(done);toast(failed?saved+' foto salvate, '+failed+' no (spazio o formato)':saved+(saved===1?' foto salvata':' foto salvate'));return;}
+    var f=files[i++];
+    shrink(f,function(b){
+      if(!b){failed++;return next()}
+      var rec={id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),campo:cid,rid:crid,ts:Date.now(),blob:b};
+      fotoPut(rec,function(ok){if(ok)saved++;else failed++;next()});
+    });
+  })();
+}
+function fotoName(c,i){return String(c.codice).replace(/[^A-Za-z0-9_-]/g,'_')+'_'+(D&&D.r&&D.r.date?D.r.date+'_':'')+(i<10?'0':'')+i+'.jpg'}
+/* Il file si offre con un foglio: Condividi apre il menu del telefono (WhatsApp, Mail, File). Serve un tocco nuovo perché Safari lo richiede. */
+var FSEL={url:null,file:null};
+function mimeOf(name){var e=(name.split('.').pop()||'').toLowerCase();return {pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',zip:'application/zip',jpg:'image/jpeg',jpeg:'image/jpeg',json:'application/json',csv:'text/csv'}[e]||'application/octet-stream'}
+function fmtSize(n){return n>=1048576?(n/1048576).toFixed(1).replace('.',',')+' MB':Math.max(1,Math.round(n/1024))+' KB'}
+function saveBlob(name,data){
+  var type=mimeOf(name),blob=new Blob([data],{type:type});
+  if(FSEL.url)URL.revokeObjectURL(FSEL.url);
+  FSEL.url=URL.createObjectURL(blob);FSEL.file=null;
+  var can=false;
+  try{FSEL.file=new File([blob],name,{type:type});can=!!(navigator.canShare&&navigator.canShare({files:[FSEL.file]}))}catch(e){}
+  $('#fsName').textContent=name+' · '+fmtSize(blob.size);
+  $('#fsShare').hidden=!can;
+  $('#fsOpen').href=FSEL.url;
+  var d=$('#fsDown');d.href=FSEL.url;d.download=name;
+  $('#fileSheet').hidden=false;
+}
+function openViewer(id){
+  if(!D||!D.fotos)return;
+  var idx=-1;D.fotos.forEach(function(f,i){if(f.id===id)idx=i});if(idx<0)return;
+  var rec=D.fotos[idx];
+  viewing={rec:rec,idx:idx+1,url:URL.createObjectURL(rec.blob)};
+  $('#vImg').src=viewing.url;
+  $('#vInfo').textContent='Foto '+viewing.idx+' di '+D.fotos.length;
+  var b=$('#vDel');b.textContent='Elimina';b.dataset.arm='';
+  $('#viewer').hidden=false;
+}
+function closeViewer(){
+  $('#viewer').hidden=true;
+  if(viewing){URL.revokeObjectURL(viewing.url);viewing=null}
+  $('#vImg').removeAttribute('src');clearTimeout(vArm);
+}
+
+/* ---------- Relazione PDF con foto ---------- */
+function blobToData(b,cb){var fr=new FileReader();fr.onload=function(){cb(fr.result)};fr.onerror=function(){cb(null)};fr.readAsDataURL(b)}
+function imgSize(src,cb){var im=new Image();im.onload=function(){cb(im.naturalWidth,im.naturalHeight)};im.onerror=function(){cb(0,0)};im.src=src}
+function makePdf(){
+  if(!D)return;
+  var J=window.jspdf&&window.jspdf.jsPDF;
+  if(!J){toast('PDF non disponibile ora: controlla la connessione e riapri la pagina');return}
+  var c=D.c,r=D.r,txt=buildReport(c,r);
+  if(!txt){toast('Compila il rilievo o aggiungi delle foto');return}
+  toast('Creo il PDF…');
+  fotoByReport(c.id,r.rid||'r1',function(arr){
+    arr.sort(function(a,b){return a.ts-b.ts});
+    var datas=[],i=0;
+    function load(){
+      if(i>=arr.length)return build();
+      blobToData(arr[i].blob,function(d){
+        i++;
+        if(!d)return load();
+        imgSize(d,function(w,h){if(w&&h)datas.push({d:d,w:w,h:h});load()});
+      });
+    }
+    function build(){
+      var doc=new J({unit:'mm',format:'a4'}),PW=210,PH=297,M=16,y=M,lines=txt.replace(/\*/g,'').split('\n');
+      doc.setFont('helvetica','bold');doc.setFontSize(17);doc.text(lines[0],M,y+5);y+=12;
+      doc.setDrawColor(30,106,68);doc.setLineWidth(.7);doc.line(M,y-3,PW-M,y-3);y+=3;
+      doc.setFont('helvetica','normal');doc.setFontSize(11);
+      for(var k=1;k<lines.length;k++){
+        if(!lines[k]){y+=3;continue}
+        doc.splitTextToSize(lines[k],PW-2*M).forEach(function(w){
+          if(y>PH-M-8){doc.addPage();y=M}
+          doc.text(w,M,y);y+=5.7;
+        });
+      }
+      if(datas.length){
+        y+=5;if(y>PH-M-50){doc.addPage();y=M}
+        doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text('Foto',M,y);y+=6;
+        var gap=6,colW=(PW-2*M-gap)/2;
+        for(var n=0;n<datas.length;n+=2){
+          var row=datas.slice(n,n+2).map(function(p){var w=colW,h=w*p.h/p.w;if(h>105){h=105;w=h*p.w/p.h}return {p:p,w:w,h:h}});
+          var rowH=Math.max.apply(null,row.map(function(q){return q.h}));
+          if(y+rowH+8>PH-M-8){doc.addPage();y=M}
+          row.forEach(function(q,j){
+            var x=M+j*(colW+gap);
+            doc.addImage(q.p.d,'JPEG',x,y,q.w,q.h);
+            doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(100);
+            doc.text('Foto '+(n+j+1),x,y+q.h+4);doc.setTextColor(0);
+          });
+          y+=rowH+10;
+        }
+      }
+      var pages=doc.getNumberOfPages();
+      for(var p=1;p<=pages;p++){
+        doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(120);
+        doc.text('Rilievo '+c.codice+' · '+fmtDate(r.date),M,PH-8);
+        doc.text(p+' / '+pages,PW-M,PH-8,{align:'right'});doc.setTextColor(0);
+      }
+      var name='Relazione_'+String(c.codice).replace(/[^A-Za-z0-9_-]/g,'_')+'_'+r.date+'.pdf';
+      saveBlob(name,doc.output('blob'));
+    }
+    load();
+  });
+}
+
+/* ---------- Varie ---------- */
+var toastT=null;
+function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},2600)}
+function setTab(t){
+  S.tab=t;
+  $$('.view').forEach(function(v){v.hidden=v.id!=='v-'+t});
+  $$('.tabs button').forEach(function(b){b.setAttribute('aria-selected',String(b.dataset.tab===t))});
+  $('#hdTitle').textContent={campi:'Campi',mappa:'Mappa',dati:'Dati'}[t];
+  if(t==='campi')renderList();
+  if(t==='mappa'){M.fitted=false;$('#hdSub').textContent=visible().filter(hasCoord).length+' campi sulla mappa';requestAnimationFrame(renderMap);}
+  if(t==='dati'){$('#hdSub').textContent='Importa ed esporta';renderDati();}
+}
+function renderAll(keepDetail){
+  renderFilters();renderList();renderMap();renderDati();
+  if(S.tab==='campi'){/* sottotitolo già aggiornato */}
+}
+var wipeT=null,resetT=null;
+
+/* ---------- Eventi ---------- */
+document.addEventListener('click',function(e){
+  var t=e.target.closest('[data-open]');if(t){openDetail(t.dataset.open);return;}
+  var tb=e.target.closest('[data-tab]');if(tb){setTab(tb.dataset.tab);return;}
+  var st=e.target.closest('[data-stato]');if(st){S.f.stato=st.dataset.stato;renderFilters();renderList();return;}
+});
+$('#q').addEventListener('input',function(e){S.f.q=e.target.value;renderList()});
+$$('select[data-f]').forEach(function(sel){sel.addEventListener('change',function(){S.f[sel.dataset.f]=sel.value;M.fitted=false;renderFilters();renderList();renderMap();if(S.tab==='mappa')$('#hdSub').textContent=visible().filter(hasCoord).length+' campi sulla mappa'})});
+$('#resetF').addEventListener('click',function(){S.f={q:'',coltura:'',zona:'',ditta:'',stato:''};$('#q').value='';M.fitted=false;renderFilters();renderList();renderMap()});
+$('#mReset').addEventListener('click',function(){S.f.coltura='';S.f.zona='';M.fitted=false;renderFilters();renderList();renderMap()});
+$('#layerBtn').addEventListener('click',toggleLayer);
+$('#locate').addEventListener('click',locateMe);
+$('#zfit').addEventListener('click',function(){M.fitted=false;S.sel=null;renderMap()});
+if(window.ResizeObserver)new ResizeObserver(function(){if(S.tab==='mappa'&&LM.map)LM.map.invalidateSize()}).observe($('#mapwrap'));
+$('#back').addEventListener('click',closeDetail);
+$('#dbody').addEventListener('input',onField);
+$('#dbody').addEventListener('change',onField);
+$('#dbody').addEventListener('change',function(e){
+  if(e.target.id==='foto'){var fl=Array.prototype.slice.call(e.target.files||[]);e.target.value='';addPhotos(fl);}
+});
+$('#vClose').addEventListener('click',closeViewer);
+$('#vSave').addEventListener('click',function(){if(viewing&&D)saveBlob(fotoName(D.c,viewing.idx),viewing.rec.blob)});
+$('#vDel').addEventListener('click',function(){
+  var b=$('#vDel');if(!viewing)return;
+  if(b.dataset.arm){
+    var id=viewing.rec.id;closeViewer();fotoDelete(id,function(){afterFotoChange();toast('Foto eliminata')});
+  } else {b.dataset.arm='1';b.textContent='Tocca ancora per confermare';vArm=setTimeout(function(){b.dataset.arm='';b.textContent='Elimina'},3000);}
+});
+$('#dbody').addEventListener('click',function(e){
+  var th=e.target.closest&&e.target.closest('[data-foto]');if(th){openViewer(th.dataset.foto);return;}
+  if(e.target.id==='zipBtn'){
+    if(!D||!D.fotos||!window.JSZip){toast('Creazione zip non disponibile ora');return}
+    var z=new JSZip(),c=D.c;
+    D.fotos.forEach(function(f,i){z.file(fotoName(c,i+1),f.blob)});
+    z.generateAsync({type:'blob'}).then(function(b){saveBlob(String(c.codice).replace(/[^A-Za-z0-9_-]/g,'_')+'_'+D.r.date+'_foto.zip',b)});
+    return;
+  }
+  var rp=e.target.closest&&e.target.closest('[data-rep]');
+  if(rp&&D){if(rp.dataset.rep!==D.r.rid)openDetail(D.c.id,rp.dataset.rep);return;}
+  if(e.target.id==='newRep'&&D){commitDetail();openDetail(D.c.id,'new');toast('Nuovo rilievo del '+fmtDate(todayISO()));return;}
+  if(e.target.id==='resetR'){
+    var b=e.target;
+    if(b.dataset.arm){
+      clearTimeout(resetT);
+      var id=D.c.id,rid=D.r.rid,left=reps(id).filter(function(x){return x.rid!==rid});
+      if(left.length)S.rilievi[id]=left;else delete S.rilievi[id];
+      S.rts[id]=Date.now();saveLocal();queueRilievo(id);
+      deleteReportPhotos(id,rid,function(){countFoto(function(){D=null;openDetail(id);renderList();toast('Rilievo eliminato')})});
+    } else {b.dataset.arm='1';b.textContent='Tocca ancora per confermare';resetT=setTimeout(function(){b.dataset.arm='';b.textContent='Elimina questo rilievo'},3000);}
+  }
+});
+$('#copy').addEventListener('click',function(){if(!D)return;var t=buildReport(D.c,D.r);if(!t){toast('Compila prima il rilievo');return;}copyText(t,'Relazione copiata')});
+function openSend(){
+  if(!D)return;
+  var n=FN[D.c.id+'|'+D.r.rid]||0;
+  $('#sendTxt').textContent='Scegli dal rullino le foto da aggiungere. Finiscono nel PDF insieme al testo del rilievo del '+fmtDate(D.r.date)+(n?', insieme alle '+n+(n===1?' foto già aggiunta':' foto già aggiunte')+' a questo rilievo.':'.');
+  $('#sendNow').textContent=n?'Crea con le '+n+(n===1?' foto già aggiunta':' foto già aggiunte'):'Crea senza foto';
+  $('#sendSheet').hidden=false;
+}
+$('#pdf').addEventListener('click',openSend);
+$('#sendCancel').addEventListener('click',function(){$('#sendSheet').hidden=true});
+$('#sendNow').addEventListener('click',function(){$('#sendSheet').hidden=true;makePdf()});
+$('#fotoSend').addEventListener('change',function(e){
+  var fl=Array.prototype.slice.call(e.target.files||[]);e.target.value='';
+  $('#sendSheet').hidden=true;
+  if(!fl.length)return;
+  addPhotos(fl,makePdf);
+});
+$('#wa').addEventListener('click',function(e){if(this.getAttribute('aria-disabled')==='true'){e.preventDefault();toast('Compila prima il rilievo')}});
+$('#file').addEventListener('change',function(e){var f=e.target.files&&e.target.files[0];onFile(f);e.target.value=''});
+$('#exp').addEventListener('click',doExport);
+$('#expCsv').addEventListener('click',copyTable);
+$('#wipe').addEventListener('click',function(){
+  var b=$('#wipe');
+  if(b.dataset.arm){
+    clearTimeout(wipeT);b.dataset.arm='';b.textContent='Cancella tutto';
+    var hadCloud=!!coll;
+    S.campi=[];S.rilievi={};S.rts={};S.demo=false;S.campiTs=Date.now();S.sel=null;lastImport=null;M.fitted=false;
+    saveLocal();
+    if(hadCloud)cloudJob(function(){return coll.get().then(function(s){var p=Promise.resolve();s.docs.forEach(function(d){if(d.id.indexOf('r_')===0)p=p.then(function(){return coll.doc(d.id).delete()})});return p}).then(pushCampiNow)});
+    fotoClear(function(){FN={};renderAll();toast('Dati e foto cancellati')});
+  } else {b.dataset.arm='1';b.textContent='Tocca ancora per confermare';wipeT=setTimeout(function(){b.dataset.arm='';b.textContent='Cancella tutto'},3000);}
+});
+try{if(!(navigator.clipboard&&navigator.clipboard.writeText))$('#expCsv').hidden=true;else $('#expCsv').hidden=false}catch(e){}
+
+/* ---------- Avvio ---------- */
+if(!loadLocal()){var d=demoData();S.campi=d.campi;S.rilievi=d.rilievi;S.rts={};S.demo=true;S.campiTs=0;}
+setSync('local');
+renderAll();
+initCloud();
+idbOpen(function(){countFoto(function(){renderList();renderMap()})});
+
+/* ---------- Copia di sicurezza ---------- */
+var bkPending=null;
+function backupSave(){
+  var o={app:'rilievi-seme',v:1,saved:new Date().toISOString(),campi:S.campi,rilievi:S.rilievi,rts:S.rts};
+  saveBlob('Rilievi_copia_'+todayISO()+'.json',JSON.stringify(o));
+}
+function backupPick(file){
+  if(!file)return;
+  file.text().then(function(t){
+    var o=JSON.parse(t);
+    if(!o||o.app!=='rilievi-seme'||!Array.isArray(o.campi))throw new Error('x');
+    bkPending=o;
+    var nr=0;Object.keys(o.rilievi||{}).forEach(function(k){nr+=Array.isArray(o.rilievi[k])?o.rilievi[k].length:1});
+    $('#bkRes').innerHTML='<div class="res"><b>Copia del '+esc(String(o.saved||'').slice(0,10))+'</b><span>'+o.campi.length+' campi e '+nr+' rilievi.</span><span>Il ripristino sostituisce i dati che hai ora.</span>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button class="btn danger sm" id="bkGo" type="button">Ripristina</button><button class="btn sm" id="bkNo" type="button">Annulla</button></div></div>';
+  }).catch(function(){bkPending=null;$('#bkRes').innerHTML='<div class="res err">Questo file non è una copia di sicurezza di Rilievi Seme.</div>'});
+}
+$('#bkSave').addEventListener('click',backupSave);
+$('#bkFile').addEventListener('change',function(e){var f=e.target.files&&e.target.files[0];e.target.value='';backupPick(f)});
+$('#bkRes').addEventListener('click',function(e){
+  if(e.target.id==='bkNo'){bkPending=null;$('#bkRes').innerHTML='';return}
+  if(e.target.id==='bkGo'&&bkPending){
+    var o=bkPending;bkPending=null;
+    S.campi=o.campi;S.rilievi=o.rilievi||{};S.rts=o.rts||{};S.demo=false;S.campiTs=Date.now();S.sel=null;
+    migrate();S.f={q:'',coltura:'',zona:'',ditta:'',stato:''};$('#q').value='';M.fitted=false;
+    saveLocal();countFoto(function(){renderAll();$('#bkRes').innerHTML='';toast('Dati ripristinati')});
+  }
+});
+$('#waPhotos').addEventListener('click',function(){
+  if(!D||!D.files||!D.files.length)return;
+  var t=buildReport(D.c,D.r);
+  try{if(t&&navigator.clipboard)navigator.clipboard.writeText(t).then(function(){toast('Testo copiato: incollalo nella didascalia')},function(){})}catch(e){}
+  navigator.share({files:D.files}).catch(function(e){if(!e||e.name!=='AbortError')toast('Condivisione non riuscita: usa il PDF con foto')});
+});
+$('#fsClose').addEventListener('click',function(){$('#fileSheet').hidden=true});
+$('#fsShare').addEventListener('click',function(){
+  if(!FSEL.file)return;
+  navigator.share({files:[FSEL.file],title:FSEL.file.name}).catch(function(e){if(!e||e.name!=='AbortError')toast('Condivisione non riuscita: prova Apri o Scarica')});
+});
+
+if('serviceWorker' in navigator&&location.protocol.indexOf('http')===0){
+  window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+}
+})();
+</script>
+
+</body>
+</html>
