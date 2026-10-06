@@ -398,10 +398,10 @@ function demoData(){
   ];
   var campi=rows.map(function(r){var p=parseCoord(r[5]);return {id:r[2].replace(/[^A-Za-z0-9_\-.~:@+]/g,'_'),ditta:r[0],coltura:r[1],codice:r[2],ettari:r[3],agricoltore:r[4],zona:r[6],lat:p.lat,lon:p.lon,telefono:''}});
   var d=todayISO(),d0=isoDaysAgo(14);
-  function mk(rid,date,o){return Object.assign({rid:rid,ts:1,date:date,stato:'',fallanze:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:''},o)}
+  function mk(rid,date,o){return Object.assign({rid:rid,ts:1,date:date,stato:'',fallanze:'',unif:'',stadio:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:''},o)}
   var ril={};
   ril['M-0412']=[mk('r1',d0,{stato:'completo',infest:'no',malattie:'no',insetti:'no',note:'Emergenza regolare.'}),
-                 mk('r2',d,{stato:'disforme',fallanze:'12',infest:'si',infTipi:['Graminacee'],malattie:'no',insetti:'no',note:'Emergenza irregolare nella parte bassa del campo.'})];
+                 mk('r2',d,{stato:'incompleto',fallanze:'12',unif:'disforme',stadio:'3-4 foglie',infest:'si',infTipi:['Graminacee'],malattie:'no',insetti:'no',note:'Emergenza irregolare nella parte bassa del campo.'})];
   ril['G-0107']=[mk('r1',d,{stato:'completo',infest:'no',malattie:'no',insetti:'no'})];
   ril['S-0359']=[mk('r1',d,{stato:'completo',infest:'si',infTipi:['Convolvolo'],malattie:'no',insetti:'si'})];
   return {campi:campi,rilievi:ril};
@@ -436,10 +436,18 @@ function saveLocal(){
 function migrate(){
   Object.keys(S.rilievi).forEach(function(id){
     var v=S.rilievi[id];
-    if(Array.isArray(v)){v.forEach(function(r){if(!r.rid)r.rid=newRid()});if(!v.length)delete S.rilievi[id];}
-    else if(v&&typeof v==='object'){v.rid='r1';S.rilievi[id]=[v];}
+    if(Array.isArray(v)){v.forEach(function(r){if(!r.rid)r.rid=newRid();fixR(r)});if(!v.length)delete S.rilievi[id];}
+    else if(v&&typeof v==='object'){v.rid='r1';fixR(v);S.rilievi[id]=[v];}
     else delete S.rilievi[id];
   });
+}
+/* Vecchi rilievi: "campo disforme" (con fallanze) diventa investimento incompleto + disforme. Aggiunge i campi nuovi. */
+function fixR(r){
+  if(!r)return r;
+  if(r.stato==='disforme'){r.stato='incompleto';r.unif='disforme';}
+  if(r.unif==null)r.unif='';
+  if(r.stadio==null)r.stadio='';
+  return r;
 }
 function loadLocal(){
   try{
@@ -502,7 +510,7 @@ function pullCloud(){
       }else if(lts>rts){queueRilievo(id);}
     });
     if(!S.demo){Object.keys(S.rilievi).forEach(function(id){if(!docs['r_'+id])queueRilievo(id)});}
-    return p.then(function(){if(changed){saveLocal();renderAll(true);}});
+    return p.then(function(){if(changed){migrate();saveLocal();renderAll(true);}});
   });
 }
 function initCloud(){
@@ -522,7 +530,7 @@ function initCloud(){
 
 /* ---------- Accesso ai dati ---------- */
 function byId(id){for(var i=0;i<S.campi.length;i++)if(S.campi[i].id===id)return S.campi[i];return null}
-function hasAnswer(r){return !!(r&&(r.stato||r.infest||r.malattie||r.insetti||(r.note&&r.note.trim())||(r.infTipi&&r.infTipi.length)))}
+function hasAnswer(r){return !!(r&&(r.stato||r.unif||(r.stadio&&r.stadio.trim())||r.infest||r.malattie||r.insetti||(r.note&&r.note.trim())||(r.infTipi&&r.infTipi.length)))}
 function newRid(){return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
 function reps(id){var a=S.rilievi[id];return Array.isArray(a)?a:[]}
 function sortedReps(id){return reps(id).slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'')||(a.ts||0)-(b.ts||0)})}
@@ -551,7 +559,8 @@ function visible(){
 function anyFilter(){var f=S.f;return !!(f.q||f.coltura||f.zona||f.ditta||f.stato)}
 function flagsOf(r){
   var o=[];if(!r)return o;
-  if(r.stato==='disforme')o.push('Disforme'+(r.fallanze!==''&&r.fallanze!=null?' '+r.fallanze+'%':''));
+  if(r.stato==='incompleto')o.push('Incompleto'+(r.fallanze!==''&&r.fallanze!=null?' '+r.fallanze+'%':''));
+  if(r.unif==='disforme')o.push('Disforme');
   if(r.infest==='si')o.push('Infestanti'+(r.infTipi&&r.infTipi.length?': '+r.infTipi.join(', ').toLowerCase():''));
   if(r.malattie==='si')o.push('Malattie');
   if(r.insetti==='si')o.push('Insetti');
@@ -693,7 +702,7 @@ function queueMap(){renderMap()}
 
 /* ---------- Scheda campo ---------- */
 var WEEDS=['Graminacee','Dicotiledoni','Sorghetta','Convolvolo','Amaranto','Chenopodio','Abutilon','Cuscuta'];
-function blankR(c){return {ts:0,date:todayISO(),stato:'',fallanze:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:c.telefono||''}}
+function blankR(c){return {ts:0,date:todayISO(),stato:'',fallanze:'',unif:'',stadio:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:c.telefono||''}}
 function seg(k,a,b,val){
   function one(o){return '<label class="'+o.t+'"><input type="radio" name="'+k+'" data-k="'+k+'" value="'+o.v+'"'+(val===o.v?' checked':'')+'><span>'+o.l+'</span></label>'}
   return '<div class="seg" role="radiogroup">'+one(a)+one(b)+'</div>';
@@ -724,8 +733,10 @@ function openDetail(id,rid){
     +'<div class="q"><div class="fotohead"><h3>Rilievi del campo</h3><button class="btn sm" id="newRep" type="button">Nuovo rilievo</button></div>'
       +'<div class="hist" id="hist"></div>'
       +'<div class="field"><label class="lbl" for="rdate">Data di questo rilievo</label><input class="in" id="rdate" data-k="date" type="date" style="max-width:220px" value="'+esc(r.date)+'"></div></div>'
-    +'<div class="q"><h3>Investimento</h3>'+seg('stato',{v:'completo',l:'Campo completo',t:'good'},{v:'disforme',l:'Campo disforme',t:'bad'},r.stato)
+    +'<div class="q"><h3>Investimento</h3>'+seg('stato',{v:'completo',l:'Campo completo',t:'good'},{v:'incompleto',l:'Campo incompleto',t:'bad'},r.stato)
       +'<div class="field" id="bl-fall" hidden><label class="lbl" for="fallanze">Percentuale di fallanze</label><div class="inwrap"><input class="in" id="fallanze" data-k="fallanze" type="number" inputmode="decimal" min="0" max="100" step="1" value="'+esc(r.fallanze)+'"><span>%</span></div></div></div>'
+    +'<div class="q"><h3>Uniformità</h3>'+seg('unif',{v:'uniforme',l:'Uniforme',t:'good'},{v:'disforme',l:'Disforme',t:'bad'},r.unif)+'</div>'
+    +'<div class="q"><h3>Stadio della coltura</h3><input class="in" id="stadio" data-k="stadio" type="text" autocomplete="off" value="'+esc(r.stadio)+'"></div>'
     +'<div class="q"><h3>Infestanti</h3>'+seg('infest',{v:'no',l:'Campo pulito',t:'good'},{v:'si',l:'Con infestanti',t:'bad'},r.infest)
       +'<div class="field" id="bl-inf" hidden><span class="lbl">Tipologia</span><div class="chips">'+WEEDS.map(function(w){return '<label class="chip"><input type="checkbox" data-k="infTipi" value="'+w+'"'+(r.infTipi.indexOf(w)>=0?' checked':'')+'><span>'+w+'</span></label>'}).join('')+'</div>'
       +'<label class="lbl" for="infNote">Altre infestanti</label><input class="in" id="infNote" data-k="infNote" type="text" value="'+esc(r.infNote)+'"></div></div>'
@@ -771,7 +782,10 @@ function buildReport(c,r){
   L.push('');
   var any=false;
   if(r.stato==='completo'){L.push('Investimento: campo completo');any=true}
-  if(r.stato==='disforme'){var f=parseFloat(String(r.fallanze).replace(',','.'));L.push('Investimento: campo disforme'+(isFinite(f)?', fallanze '+f+'%':''));any=true}
+  if(r.stato==='incompleto'){var f=parseFloat(String(r.fallanze).replace(',','.'));L.push('Investimento: campo incompleto'+(isFinite(f)?', fallanze '+f+'%':''));any=true}
+  if(r.unif==='uniforme'){L.push('Uniformità: uniforme');any=true}
+  if(r.unif==='disforme'){L.push('Uniformità: disforme');any=true}
+  if(r.stadio&&r.stadio.trim()){L.push('Stadio della coltura: '+r.stadio.trim());any=true}
   if(r.infest==='no'){L.push('Infestanti: campo pulito');any=true}
   if(r.infest==='si'){var t=(r.infTipi||[]).concat(r.infNote&&r.infNote.trim()?[r.infNote.trim()]:[]).join(', ');L.push('Infestanti: presenti'+(t?' ('+t+')':''));any=true}
   if(r.malattie==='no'){L.push('Malattie: assenti');any=true}
@@ -794,7 +808,7 @@ function waNumber(t){
 }
 function syncDetail(){
   if(!D)return;var r=D.r;
-  $('#bl-fall').hidden=r.stato!=='disforme';
+  $('#bl-fall').hidden=r.stato!=='incompleto';
   $('#bl-inf').hidden=r.infest!=='si';
   $('#bl-mal').hidden=r.malattie!=='si';
   $('#bl-ins').hidden=r.insetti!=='si';
@@ -910,7 +924,8 @@ function exportRows(){
       if(!repDone(c.id,r))return;
       n++;
       out.push({'Data rilievo':fmtDate(r.date),'Codice':c.codice,'Rilievo n.':n,'Ditta sementiera':c.ditta,'Coltura':c.coltura,'Agricoltore':c.agricoltore,'Zona':c.zona,'Ettari':c.ettari,
-        'Investimento':r.stato==='completo'?'Completo':r.stato==='disforme'?'Disforme':'','Fallanze %':r.stato==='disforme'?r.fallanze:'',
+        'Investimento':r.stato==='completo'?'Completo':r.stato==='incompleto'?'Incompleto':'','Fallanze %':r.stato==='incompleto'?r.fallanze:'',
+        'Uniformità':r.unif==='uniforme'?'Uniforme':r.unif==='disforme'?'Disforme':'','Stadio coltura':r.stadio||'',
         'Infestanti':r.infest==='no'?'Pulito':r.infest==='si'?'Presenti':'','Tipo infestanti':(r.infTipi||[]).concat(r.infNote?[r.infNote]:[]).join(', '),
         'Malattie':r.malattie==='no'?'No':r.malattie==='si'?'Sì':'','Dettaglio malattie':r.malNote||'',
         'Insetti':r.insetti==='no'?'No':r.insetti==='si'?'Sì':'','Dettaglio insetti':r.insNote||'','Commenti':r.note||'','Foto':FN[c.id+'|'+(r.rid||'r1')]||0});
