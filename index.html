@@ -408,7 +408,7 @@ function demoData(){
   ];
   var campi=rows.map(function(r){var p=parseCoord(r[5]);return {id:r[2].replace(/[^A-Za-z0-9_\-.~:@+]/g,'_'),ditta:r[0],coltura:r[1],codice:r[2],ettari:r[3],agricoltore:r[4],zona:r[6],lat:p.lat,lon:p.lon,telefono:''}});
   var d=todayISO(),d0=isoDaysAgo(14);
-  function mk(rid,date,o){return Object.assign({rid:rid,ts:1,date:date,stato:'',fallanze:'',unif:'',stadio:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:''},o)}
+  function mk(rid,date,o){return Object.assign({rid:rid,ts:1,date:date,stato:'',fallanze:'',unif:'',stadio:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',todo:'',agr:'',tel:''},o)}
   var ril={};
   ril['M-0412']=[mk('r1',d0,{stato:'completo',infest:'no',malattie:'no',insetti:'no',note:'Emergenza regolare.'}),
                  mk('r2',d,{stato:'incompleto',fallanze:'12',unif:'disforme',stadio:'3-4 foglie',infest:'si',infTipi:['Graminacee'],malattie:'no',insetti:'no',note:'Emergenza irregolare nella parte bassa del campo.'})];
@@ -541,7 +541,7 @@ function initCloud(){
 
 /* ---------- Accesso ai dati ---------- */
 function byId(id){for(var i=0;i<S.campi.length;i++)if(S.campi[i].id===id)return S.campi[i];return null}
-function hasAnswer(r){return !!(r&&(r.stato||r.unif||(r.stadio&&r.stadio.trim())||r.infest||r.malattie||r.insetti||(r.note&&r.note.trim())||(r.infTipi&&r.infTipi.length)))}
+function hasAnswer(r){return !!(r&&(r.stato||r.unif||(r.stadio&&r.stadio.trim())||r.infest||r.malattie||r.insetti||(r.note&&r.note.trim())||(r.todo&&r.todo.trim())||(r.agr&&r.agr.trim())||(r.infTipi&&r.infTipi.length)))}
 function newRid(){return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
 function reps(id){var a=S.rilievi[id];return Array.isArray(a)?a:[]}
 function sortedReps(id){return reps(id).slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'')||(a.ts||0)-(b.ts||0)})}
@@ -713,7 +713,7 @@ function queueMap(){renderMap()}
 
 /* ---------- Scheda campo ---------- */
 var WEEDS=['Graminacee','Dicotiledoni','Sorghetta','Convolvolo','Amaranto','Chenopodio','Abutilon','Cuscuta'];
-function blankR(c){return {ts:0,date:todayISO(),stato:'',fallanze:'',unif:'',stadio:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',tel:c.telefono||''}}
+function blankR(c){return {ts:0,date:todayISO(),stato:'',fallanze:'',unif:'',stadio:'',infest:'',infTipi:[],infNote:'',malattie:'',malNote:'',insetti:'',insNote:'',note:'',todo:'',agr:'',tel:c.telefono||''}}
 function seg(k,a,b,val){
   function one(o){return '<label class="'+o.t+'"><input type="radio" name="'+k+'" data-k="'+k+'" value="'+o.v+'"'+(val===o.v?' checked':'')+'><span>'+o.l+'</span></label>'}
   return '<div class="seg" role="radiogroup">'+one(a)+one(b)+'</div>';
@@ -755,7 +755,9 @@ function openDetail(id,rid){
       +'<div class="field" id="bl-mal" hidden><label class="lbl" for="malNote">Quali (facoltativo)</label><input class="in" id="malNote" data-k="malNote" type="text" value="'+esc(r.malNote)+'"></div></div>'
     +'<div class="q"><h3>Insetti</h3>'+seg('insetti',{v:'no',l:'No',t:'good'},{v:'si',l:'Sì',t:'bad'},r.insetti)
       +'<div class="field" id="bl-ins" hidden><label class="lbl" for="insNote">Quali (facoltativo)</label><input class="in" id="insNote" data-k="insNote" type="text" value="'+esc(r.insNote)+'"></div></div>'
-    +'<div class="q"><h3>Commenti sulla coltura</h3><textarea class="ta" id="note" data-k="note" rows="4" placeholder="Stadio, uniformità, prossimi interventi">'+esc(r.note)+'</textarea></div>'
+    +'<div class="q"><h3>Commento sulla coltura</h3><textarea class="ta" id="note" data-k="note" rows="4" placeholder="Com\'è la coltura, uniformità, osservazioni">'+esc(r.note)+'</textarea></div>'
+    +'<div class="q"><h3>Cose da fare</h3><textarea class="ta" id="todo" data-k="todo" rows="3" placeholder="Interventi, controlli, prossima visita">'+esc(r.todo||'')+'</textarea></div>'
+    +'<div class="q"><h3>Note per l\'agricoltore</h3><textarea class="ta" id="agr" data-k="agr" rows="3" placeholder="Indicazioni e consigli per l\'agricoltore">'+esc(r.agr||'')+'</textarea></div>'
     +'<div class="q"><div class="fotohead"><h3>Foto</h3><span id="fotoN"></span></div>'
       +'<label class="btn filebtn">Scatta o scegli foto<input id="foto" type="file" accept="image/*" multiple></label>'
       +'<div class="thumbs" id="thumbs"></div>'
@@ -785,11 +787,8 @@ function closeDetail(){
   renderFilters();renderList();renderMap();
 }
 function buildReport(c,r){
-  var L=['*RILIEVO CAMPO*','Data: '+fmtDate(r.date),'Codice: '+c.codice+(c.coltura?' · '+c.coltura:'')];
-  if(c.ditta)L.push('Ditta: '+c.ditta);
-  if(c.agricoltore)L.push('Agricoltore: '+c.agricoltore);
-  if(c.ettari)L.push('Superficie: '+fmtHa(c.ettari)+' ha');
-  if(c.zona)L.push('Zona: '+c.zona);
+  var L=['*RILIEVO CAMPO*','Data: '+fmtDate(r.date),'Codice: '+c.codice];
+  if(c.coltura)L.push('Coltura: '+c.coltura);
   L.push('');
   var any=false;
   if(r.stato==='completo'){L.push('Investimento: campo completo');any=true}
@@ -805,7 +804,9 @@ function buildReport(c,r){
   if(r.insetti==='si'){L.push('Insetti: presenti'+(r.insNote&&r.insNote.trim()?' ('+r.insNote.trim()+')':''));any=true}
   var nf=FN[c.id+'|'+(r.rid||'r1')]||0;
   if(nf){L.push('Foto scattate: '+nf);any=true}
-  if(r.note&&r.note.trim()){L.push('');L.push('Note: '+r.note.trim());any=true}
+  if(r.note&&r.note.trim()){L.push('');L.push('Commento coltura: '+r.note.trim());any=true}
+  if(r.todo&&r.todo.trim()){L.push('');L.push('Cose da fare: '+r.todo.trim());any=true}
+  if(r.agr&&r.agr.trim()){L.push('');L.push('Note per l\'agricoltore: '+r.agr.trim());any=true}
   return any?L.join('\n'):'';
 }
 function waNumber(t){
@@ -965,7 +966,7 @@ function exportRows(){
         'Uniformità':r.unif==='uniforme'?'Uniforme':r.unif==='disforme'?'Disforme':'','Stadio coltura':r.stadio||'',
         'Infestanti':r.infest==='no'?'Pulito':r.infest==='si'?'Presenti':'','Tipo infestanti':(r.infTipi||[]).concat(r.infNote?[r.infNote]:[]).join(', '),
         'Malattie':r.malattie==='no'?'No':r.malattie==='si'?'Sì':'','Dettaglio malattie':r.malNote||'',
-        'Insetti':r.insetti==='no'?'No':r.insetti==='si'?'Sì':'','Dettaglio insetti':r.insNote||'','Commenti':r.note||'','Foto':FN[c.id+'|'+(r.rid||'r1')]||0});
+        'Insetti':r.insetti==='no'?'No':r.insetti==='si'?'Sì':'','Dettaglio insetti':r.insNote||'','Commenti':r.note||'','Cose da fare':r.todo||'','Note per agricoltore':r.agr||'','Foto':FN[c.id+'|'+(r.rid||'r1')]||0});
     });
   });
   return out;
@@ -1293,7 +1294,9 @@ function repText(r){
   if(r.malattie==='si')L.push('Malattie: sì'+(r.malNote&&r.malNote.trim()?' ('+r.malNote.trim()+')':''));
   if(r.insetti==='no')L.push('Insetti: no');
   if(r.insetti==='si')L.push('Insetti: sì'+(r.insNote&&r.insNote.trim()?' ('+r.insNote.trim()+')':''));
-  if(r.note&&r.note.trim())L.push('Note: '+r.note.trim());
+  if(r.note&&r.note.trim())L.push('Commento: '+r.note.trim());
+  if(r.todo&&r.todo.trim())L.push('Da fare: '+r.todo.trim());
+  if(r.agr&&r.agr.trim())L.push('Note agricoltore: '+r.agr.trim());
   return L.join('\n');
 }
 function shCampi(){
