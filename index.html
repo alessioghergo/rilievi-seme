@@ -882,7 +882,9 @@ function importRows(rows){
     var cod=String(g('codice')==null?'':g('codice')).trim(),agr=String(g('agricoltore')||'').trim(),col=cn('coltura',g('coltura'));
     if(!cod&&!agr&&!col){skipped++;return;}
     if(!cod)cod='C'+(i+1);
-    var id=cod.replace(/[^A-Za-z0-9_\-.~:@+]/g,'_').slice(0,80);if(!id||id==='.'||id==='..')id='C'+(i+1);
+    /* L'identità del campo è agricoltore + coltura, non il codice: il codice si può aggiungere o correggere senza perdere i rilievi. */
+    var bk=agr?baseKey(agr,col):'';
+    var id=(bk?bk.replace(/\|/g,'__').replace(/[^a-z0-9_]+/g,'-'):cod.replace(/[^A-Za-z0-9_\-.~:@+]/g,'_')).slice(0,80);if(!id||id==='.'||id==='..')id='C'+(i+1);
     if(seen[id]){var n=2;while(seen[id+'_'+n])n++;id=id+'_'+n;renamed++;}
     seen[id]=1;
     var p=null;
@@ -895,6 +897,23 @@ function importRows(rows){
   if(!campi.length)return {err:'Il file non contiene righe con dati.'};
   return {campi:campi,noCoord:noCoord,renamed:renamed,skipped:skipped,map:map};
 }
+function baseKey(agr,col){var a=norm(agr).replace(/\s+/g,' ').trim(),c=norm(col).replace(/\s+/g,' ').trim();return (a||c)?a+'|'+c:''}
+/* Collega i campi già presenti a quelli del nuovo file (stesso agricoltore e stessa coltura) per portarsi dietro rilievi e foto. */
+function buildIdMap(oldC,newC){
+  var o={},n={},map={};
+  oldC.forEach(function(c){if(!c.agricoltore)return;var k=baseKey(c.agricoltore,c.coltura);(o[k]=o[k]||[]).push(c.id)});
+  newC.forEach(function(c){if(!c.agricoltore)return;var k=baseKey(c.agricoltore,c.coltura);(n[k]=n[k]||[]).push(c.id)});
+  Object.keys(o).forEach(function(k){if(!n[k])return;o[k].forEach(function(id,i){if(n[k][i])map[id]=n[k][i]})});
+  return map;
+}
+function fotoRemap(map,cb){
+  var ids=Object.keys(map).filter(function(k){return map[k]!==k});
+  if(!ids.length)return cb();
+  fotoAll(function(a){
+    var l=a.filter(function(f){return map[f.campo]&&map[f.campo]!==f.campo}),i=0;
+    (function next(){if(i>=l.length)return cb();var f=l[i++];f.campo=map[f.campo];fotoPut(f,next)})();
+  });
+}
 function onFile(file){
   if(!file)return;
   if(!window.XLSX){lastImport={err:'La lettura del file Excel non è disponibile ora. Controlla la connessione e riapri la pagina.'};renderDati();return;}
@@ -903,12 +922,19 @@ function onFile(file){
     var rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
     var res=importRows(rows);
     if(res.err){lastImport={err:res.err};renderDati();return;}
+    var idMap={};
     if(S.demo){S.rilievi={};S.rts={};}
+    else{
+      idMap=buildIdMap(S.campi,res.campi);
+      var nr={},nt={};
+      Object.keys(S.rilievi).forEach(function(id){var t=idMap[id]||id;nr[t]=(nr[t]||[]).concat(S.rilievi[id]);nt[t]=Math.max(nt[t]||0,S.rts[id]||0)});
+      S.rilievi=nr;S.rts=nt;
+    }
     S.campi=res.campi;S.demo=false;S.campiTs=Date.now();S.sel=null;
     S.f={q:'',coltura:'',zona:'',ditta:'',stato:''};$('#q').value='';M.fitted=false;
     saveLocal();cloudJob(pushCampiNow);
     lastImport=res;lastImport.n=res.campi.length;
-    renderAll();toast('Importati '+res.campi.length+' campi');
+    fotoRemap(idMap,function(){countFoto(function(){renderAll();toast('Importati '+res.campi.length+' campi')})});
   }).catch(function(){lastImport={err:'Non riesco a leggere questo file. Salvalo come .xlsx e riprova.'};renderDati();});
 }
 function renderDati(){
@@ -922,7 +948,7 @@ function renderDati(){
     var cols=Object.keys(LABELS).map(function(f){return '<span class="col'+(r.map[f]?' on':'')+'">'+LABELS[f]+(r.map[f]?'':' (assente)')+'</span>'}).join('');
     el.innerHTML='<div class="res"><b>'+r.n+' campi importati.</b>'
       +(r.noCoord?'<span>'+r.noCoord+' senza coordinate leggibili: restano nell\'elenco, non sulla mappa.</span>':'<span>Tutti i campi hanno le coordinate.</span>')
-      +(r.renamed?'<span>'+r.renamed+' codici ripetuti: aggiunto un numero in fondo.</span>':'')
+      +(r.renamed?'<span>'+r.renamed+' campi con stesso agricoltore e coltura: distinti con un numero, quindi tieni sempre lo stesso ordine nel file.</span>':'')
       +(r.skipped?'<span>'+r.skipped+' righe vuote ignorate.</span>':'')
       +'<div class="cols" style="margin-top:6px">'+cols+'</div></div>';
   }
@@ -1271,15 +1297,15 @@ function repText(r){
   return L.join('\n');
 }
 function shCampi(){
-  return S.campi.map(function(c){return {ditta:c.ditta||'',coltura:c.coltura||'',codice:c.codice,ettari:c.ettari||'',agricoltore:c.agricoltore||'',coordinate:hasCoord(c)?c.lat.toFixed(6)+', '+c.lon.toFixed(6):'',zona:c.zona||''}});
+  return S.campi.map(function(c){return {chiave:c.id,ditta:c.ditta||'',coltura:c.coltura||'',codice:c.codice,ettari:c.ettari||'',agricoltore:c.agricoltore||'',coordinate:hasCoord(c)?c.lat.toFixed(6)+', '+c.lon.toFixed(6):'',zona:c.zona||''}});
 }
 function shDesired(){
   var m={};
   S.campi.forEach(function(c){
     sortedReps(c.id).forEach(function(r){
       var t=repText(r);if(!t||!r.date)return;
-      var k=c.codice+'|'+fmtDate(r.date);
-      if(!m[k])m[k]={codice:c.codice,data:fmtDate(r.date),testo:t};else m[k].testo+='\n---\n'+t;
+      var k=c.id+'|'+fmtDate(r.date);
+      if(!m[k])m[k]={chiave:c.id,data:fmtDate(r.date),testo:t};else m[k].testo+='\n---\n'+t;
     });
   });
   return m;
@@ -1301,7 +1327,7 @@ function shSync(force){
     .then(function(r){return r.json()})
     .then(function(j){
       if(!j||!j.ok)throw new Error(j&&j.errore||'risposta non valida');
-      cells.forEach(function(c){SH.sent[c.codice+'|'+c.data]=c.testo});
+      cells.forEach(function(c){SH.sent[c.chiave+'|'+c.data]=c.testo});
       SH.csig=sig;SH.err='';shStore();
       shStatus('Foglio Google aggiornato: '+campi.length+' campi, '+cells.length+(cells.length===1?' visita inviata.':' visite inviate.'));
     })

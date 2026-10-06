@@ -1,5 +1,5 @@
 /* Rilievi Seme: tiene in memoria l'app e le mappe già viste, così funziona anche con poco segnale. */
-var V = 'rilievi-v3';
+var V = 'rilievi-v4';
 var SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png',
   'lib/leaflet/leaflet.css', 'lib/leaflet/leaflet.js',

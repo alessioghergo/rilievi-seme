@@ -4,7 +4,7 @@
  * Va incollato in Estensioni > Apps Script di un foglio Google e pubblicato come "App web".
  */
 var NOME_FOGLIO = 'Rilievi';
-var INTESTAZIONI = ['Ditta sementiera', 'Tipo di coltura', 'Codice', 'Ettari', 'Nome agricoltore', 'Coordinate', 'Zona'];
+var INTESTAZIONI = ['Ditta sementiera', 'Tipo di coltura', 'Codice', 'Ettari', 'Nome agricoltore', 'Coordinate', 'Zona', 'Chiave'];
 
 function doGet() {
   return ContentService.createTextOutput('Rilievi Seme: collegamento attivo.');
@@ -23,16 +23,17 @@ function doPost(e) {
       sh.getRange(1, 1, 1, N).setValues([INTESTAZIONI]).setFontWeight('bold');
       sh.setFrozenRows(1);
       sh.setFrozenColumns(3);
+      sh.hideColumns(N);
     }
 
-    // Righe: aggiorna i campi esistenti (chiave = Codice) e aggiunge i nuovi.
+    // Righe: aggiorna i campi esistenti (chiave = agricoltore + coltura, colonna nascosta) e aggiunge i nuovi.
     var lastRow = sh.getLastRow();
     var righe = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, N).getDisplayValues() : [];
     var indice = {};
-    righe.forEach(function (r, i) { indice[String(r[2])] = i; });
+    righe.forEach(function (r, i) { indice[String(r[N - 1])] = i; });
     (d.campi || []).forEach(function (c) {
-      var v = [c.ditta, c.coltura, String(c.codice), c.ettari, c.agricoltore, c.coordinate, c.zona];
-      var key = String(c.codice);
+      var v = [c.ditta, c.coltura, String(c.codice), c.ettari, c.agricoltore, c.coordinate, c.zona, c.chiave];
+      var key = String(c.chiave);
       if (key in indice) {
         righe[indice[key]] = v;
       } else {
@@ -51,7 +52,7 @@ function doPost(e) {
       var lastCol = Math.max(sh.getLastColumn(), N);
       var intest = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
       celle.forEach(function (c) {
-        if (!(String(c.codice) in indice)) return;
+        if (!(String(c.chiave) in indice)) return;
         var col = -1;
         for (var j = N; j < intest.length; j++) { if (intest[j] === c.data) { col = j + 1; break; } }
         if (col < 0) {
@@ -60,7 +61,7 @@ function doPost(e) {
           sh.getRange(1, col).setNumberFormat('@').setValue(c.data).setFontWeight('bold');
           sh.setColumnWidth(col, 280);
         }
-        sh.getRange(indice[String(c.codice)] + 2, col)
+        sh.getRange(indice[String(c.chiave)] + 2, col)
           .setNumberFormat('@').setWrap(true).setVerticalAlignment('top').setValue(c.testo);
       });
     }
