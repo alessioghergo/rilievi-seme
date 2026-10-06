@@ -285,7 +285,17 @@ html,body{margin:0}
       <div class="sec">
         <h2>Salvataggio</h2>
         <p id="syncTxt"></p>
-        <p>Campi, rilievi e foto restano salvati su questo telefono, dentro l'app. Nessun dato viene inviato online. Se cancelli i dati di Safari si perdono, quindi fai ogni tanto la copia di sicurezza qui sotto.</p>
+        <p>Campi, rilievi e foto restano salvati su questo telefono, dentro l'app. Nessun dato viene inviato online, tranne il riepilogo se colleghi il foglio Google qui sotto. Se cancelli i dati di Safari si perdono, quindi fai ogni tanto la copia di sicurezza qui sotto.</p>
+      </div>
+      <div class="sec">
+        <h2>Foglio Google</h2>
+        <p>Riepilogo online: una riga per campo e una colonna per ogni giorno di visita, aggiornato da solo quando salvi un rilievo. Incolla qui l'indirizzo del collegamento (finisce con /exec).</p>
+        <input class="in" id="shUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec">
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn primary" id="shGo" type="button">Collega e invia tutto</button>
+          <button class="btn" id="shOff" type="button">Scollega</button>
+        </div>
+        <p id="shTxt"></p>
       </div>
       <div class="sec">
         <h2>Copia di sicurezza</h2>
@@ -431,6 +441,7 @@ function parseCoord(s){
 /* ---------- Salvataggio locale ---------- */
 function saveLocal(){
   try{localStorage.setItem(LS_KEY,JSON.stringify({campi:S.campi,rilievi:S.rilievi,rts:S.rts,demo:S.demo,campiTs:S.campiTs}));}catch(e){}
+  try{shSchedule()}catch(e){}
 }
 /* Versione precedente: un solo rilievo per campo. Lo trasforma in un elenco con un rilievo. */
 function migrate(){
@@ -1238,11 +1249,86 @@ $('#wipe').addEventListener('click',function(){
 });
 try{if(!(navigator.clipboard&&navigator.clipboard.writeText))$('#expCsv').hidden=true;else $('#expCsv').hidden=false}catch(e){}
 
+/* ---------- Riepilogo su foglio Google (facoltativo) ---------- */
+/* Una riga per campo, una colonna per ogni data di visita. Le celle già inviate non si cancellano mai dal foglio. */
+var SHK='rilieviSeme.sheet',SH={url:'',sent:{},csig:'',busy:false,again:false,timer:null,err:''};
+try{var shj=JSON.parse(localStorage.getItem(SHK)||'{}');SH.url=shj.url||'';SH.sent=shj.sent||{};SH.csig=shj.csig||''}catch(e){}
+function shStore(){try{localStorage.setItem(SHK,JSON.stringify({url:SH.url,sent:SH.sent,csig:SH.csig}))}catch(e){}}
+function repText(r){
+  var L=[];
+  if(r.stato==='completo')L.push('Investimento: completo');
+  if(r.stato==='incompleto'){var f=parseFloat(String(r.fallanze).replace(',','.'));L.push('Investimento: incompleto'+(isFinite(f)?', fallanze '+f+'%':''))}
+  if(r.unif==='uniforme')L.push('Uniforme');
+  if(r.unif==='disforme')L.push('Disforme');
+  if(r.stadio&&r.stadio.trim())L.push('Stadio: '+r.stadio.trim());
+  if(r.infest==='no')L.push('Infestanti: no');
+  if(r.infest==='si'){var t=(r.infTipi||[]).concat(r.infNote&&r.infNote.trim()?[r.infNote.trim()]:[]).join(', ');L.push('Infestanti: sì'+(t?' ('+t+')':''))}
+  if(r.malattie==='no')L.push('Malattie: no');
+  if(r.malattie==='si')L.push('Malattie: sì'+(r.malNote&&r.malNote.trim()?' ('+r.malNote.trim()+')':''));
+  if(r.insetti==='no')L.push('Insetti: no');
+  if(r.insetti==='si')L.push('Insetti: sì'+(r.insNote&&r.insNote.trim()?' ('+r.insNote.trim()+')':''));
+  if(r.note&&r.note.trim())L.push('Note: '+r.note.trim());
+  return L.join('\n');
+}
+function shCampi(){
+  return S.campi.map(function(c){return {ditta:c.ditta||'',coltura:c.coltura||'',codice:c.codice,ettari:c.ettari||'',agricoltore:c.agricoltore||'',coordinate:hasCoord(c)?c.lat.toFixed(6)+', '+c.lon.toFixed(6):'',zona:c.zona||''}});
+}
+function shDesired(){
+  var m={};
+  S.campi.forEach(function(c){
+    sortedReps(c.id).forEach(function(r){
+      var t=repText(r);if(!t||!r.date)return;
+      var k=c.codice+'|'+fmtDate(r.date);
+      if(!m[k])m[k]={codice:c.codice,data:fmtDate(r.date),testo:t};else m[k].testo+='\n---\n'+t;
+    });
+  });
+  return m;
+}
+function shStatus(t){var el=$('#shTxt');if(el)el.textContent=t;}
+function shSchedule(){
+  if(!SH.url||S.demo)return;
+  clearTimeout(SH.timer);SH.timer=setTimeout(function(){shSync(false)},2500);
+}
+function shSync(force){
+  if(!SH.url||S.demo||!S.campi.length)return;
+  if(SH.busy){SH.again=true;return}
+  var want=shDesired(),cells=[],k;
+  for(k in want)if(force||SH.sent[k]!==want[k].testo)cells.push(want[k]);
+  var campi=shCampi(),sig=JSON.stringify(campi);
+  if(!force&&!cells.length&&sig===SH.csig){shStatus('Foglio Google aggiornato.');return}
+  SH.busy=true;shStatus('Invio al foglio Google…');
+  fetch(SH.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({campi:campi,celle:cells})})
+    .then(function(r){return r.json()})
+    .then(function(j){
+      if(!j||!j.ok)throw new Error(j&&j.errore||'risposta non valida');
+      cells.forEach(function(c){SH.sent[c.codice+'|'+c.data]=c.testo});
+      SH.csig=sig;SH.err='';shStore();
+      shStatus('Foglio Google aggiornato: '+campi.length+' campi, '+cells.length+(cells.length===1?' visita inviata.':' visite inviate.'));
+    })
+    .catch(function(e){SH.err=String(e&&e.message||e);shStatus('Invio non riuscito ('+SH.err+'). Riproverà alla prossima modifica o quando torna il segnale.')})
+    .then(function(){SH.busy=false;if(SH.again){SH.again=false;shSchedule()}});
+}
+(function(){
+  var u=$('#shUrl');if(u)u.value=SH.url;
+  if(SH.url)shStatus('Collegato. Le nuove visite partono da sole.');
+  $('#shGo').addEventListener('click',function(){
+    var v=$('#shUrl').value.trim();
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec$/.test(v)){shStatus('L\'indirizzo non sembra giusto: deve iniziare con https://script.google.com/macros/s/ e finire con /exec');return}
+    if(v!==SH.url){SH.sent={};SH.csig=''}
+    SH.url=v;shStore();
+    if(S.demo){shStatus('Prima importa il tuo file Excel dei campi.');return}
+    shSync(true);
+  });
+  $('#shOff').addEventListener('click',function(){SH.url='';SH.sent={};SH.csig='';shStore();$('#shUrl').value='';shStatus('Scollegato. I dati già nel foglio restano lì.')});
+  window.addEventListener('online',function(){shSchedule()});
+})();
+
 /* ---------- Avvio ---------- */
 if(!loadLocal()){var d=demoData();S.campi=d.campi;S.rilievi=d.rilievi;S.rts={};S.demo=true;S.campiTs=0;}
 setSync('local');
 renderAll();
 initCloud();
+shSchedule();
 idbOpen(function(){countFoto(function(){renderList();renderMap()})});
 
 /* ---------- Copia di sicurezza ---------- */
