@@ -2,7 +2,7 @@
  * Rilievi Seme: riepilogo su foglio Google.
  * Una riga per campo (stesse colonne del file Excel importato) e una colonna per ogni data di visita.
  * Va incollato in Estensioni > Apps Script di un foglio Google e pubblicato come "App web".
- * Salva anche su Google Drive il PDF di ogni rilievo (relazione e foto), una sottocartella per campo.
+ * Salva anche su Google Drive le foto dei rilievi (un file JPG per foto), una sottocartella per campo.
  */
 var NOME_CARTELLA = 'Rilievi Seme - Report';
 // 'LINK' = chiunque abbia il link alla cartella può vedere i PDF (sola lettura); 'PRIVATA' = solo chi condividi a mano da Drive.
@@ -19,7 +19,7 @@ function doPost(e) {
   lock.waitLock(30000);
   try {
     var d = JSON.parse(e.postData.contents);
-    if (d.azione === 'pdf') return salvaPdf(d);
+    if (d.azione === 'foto' || d.azione === 'pdf') return salvaFile(d);
     var ss = SpreadsheetApp.getActive();
     var sh = ss.getSheetByName(NOME_FOGLIO) || ss.insertSheet(NOME_FOGLIO);
     var N = INTESTAZIONI.length;
@@ -101,7 +101,7 @@ function sottocartella(radice, nome) {
 
 function pulisci(t) { return String(t || '').replace(/[\\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim(); }
 
-function salvaPdf(d) {
+function salvaFile(d) {
   var radice = cartellaRadice();
   var c = d.campo || {};
   var nome = [pulisci(c.codice), pulisci(c.agricoltore), pulisci(c.coltura)].filter(String).join(' - ') || 'Senza nome';
@@ -113,8 +113,9 @@ function salvaPdf(d) {
   (d.file || []).forEach(function (f) {
     var it = cart.getFilesByName(f.nome);
     while (it.hasNext()) it.next().setTrashed(true);
-    var blob = Utilities.newBlob(Utilities.base64Decode(f.base64), 'application/pdf', f.nome);
+    var blob = Utilities.newBlob(Utilities.base64Decode(f.base64), f.tipo || 'application/pdf', f.nome);
     cart.createFile(blob);
   });
-  return risposta({ ok: true, cartella: radice.getUrl() });
+  // v: 2 = questa versione dello script sa salvare le foto (l'app lo controlla).
+  return risposta({ ok: true, v: 2, cartella: radice.getUrl() });
 }

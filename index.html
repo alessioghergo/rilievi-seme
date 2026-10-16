@@ -299,10 +299,10 @@ html,body{margin:0}
       </div>
       <div class="sec">
         <h2>Cartella Google Drive</h2>
-        <p>Per ogni rilievo salva un unico PDF (relazione con testo selezionabile e foto) in una cartella condivisa su Drive, una sottocartella per campo. Usa lo stesso collegamento del foglio Google.</p>
-        <label style="display:flex;align-items:center;gap:8px;margin:6px 0"><input id="drOn" type="checkbox" checked> Invia i PDF su Drive in automatico</label>
+        <p>Salva ogni foto come file JPG in una cartella condivisa su Drive, una sottocartella per campo. Le foto si chiamano codice_coltura_agricoltore_NN.jpg, con NN che conta le foto del campo. Usa lo stesso collegamento del foglio Google.</p>
+        <label style="display:flex;align-items:center;gap:8px;margin:6px 0"><input id="drOn" type="checkbox" checked> Invia le foto su Drive in automatico</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
-          <button class="btn primary" id="drGo" type="button">Invia tutti i PDF ora</button>
+          <button class="btn primary" id="drGo" type="button">Invia tutte le foto ora</button>
           <a class="btn" id="drOpen" href="#" target="_blank" rel="noopener" hidden>Apri cartella Drive</a>
         </div>
         <p id="drTxt"></p>
@@ -1392,71 +1392,68 @@ function shSync(force){
 })();
 
 /* ---------- Cartella Google Drive condivisa (facoltativa, usa lo stesso collegamento del foglio) ---------- */
-/* Per ogni rilievo salva due PDF nella cartella del campo: la relazione e le foto. Si rifà solo quando il rilievo o le foto cambiano. */
-var DRK='rilieviSeme.drive',DR={on:true,sent:{},folder:'',busy:false,again:false,timer:null};
-try{var drj=JSON.parse(localStorage.getItem(DRK)||'{}');DR.on=drj.on!==false;DR.sent=drj.sent||{};DR.folder=drj.folder||''}catch(e){}
-function drStore(){try{localStorage.setItem(DRK,JSON.stringify({on:DR.on,sent:DR.sent,folder:DR.folder}))}catch(e){}}
+/* Ogni foto va su Drive come file JPG nella cartella del campo, chiamata codice_coltura_agricoltore_NN.jpg.
+   Il numero NN è un contatore per campo: una volta assegnato a una foto non cambia più, anche se ne elimini altre. */
+var DRK='rilieviSeme.drive',DR={on:true,ph:{},cnt:{},sent:{},folder:'',busy:false,again:false,timer:null};
+try{var drj=JSON.parse(localStorage.getItem(DRK)||'{}');DR.on=drj.on!==false;DR.ph=drj.ph||{};DR.cnt=drj.cnt||{};DR.sent=drj.sent||{};DR.folder=drj.folder||''}catch(e){}
+function drStore(){try{localStorage.setItem(DRK,JSON.stringify({on:DR.on,ph:DR.ph,cnt:DR.cnt,sent:DR.sent,folder:DR.folder}))}catch(e){}}
 function drStatus(t){var el=$('#drTxt');if(el)el.textContent=t;var a=$('#drOpen');if(a){a.hidden=!DR.folder;if(DR.folder)a.href=DR.folder}}
 function drSchedule(delay){
   if(!SH.url||!DR.on||S.demo)return;
   clearTimeout(DR.timer);DR.timer=setTimeout(function(){drSync(false)},delay||20000);
 }
 function b64Of(blob,cb){blobToData(blob,function(d){cb(d?d.split(',')[1]:null)})}
+function drPart(t){return String(t||'').replace(/[\\\/:*?"<>|\s]+/g,'_').replace(/^_+|_+$/g,'')}
+function drBase(c){return [drPart(c.codice),drPart(c.coltura),drPart(c.agricoltore)].filter(String).join('_')||'campo'}
 function drSync(force){
   if(!SH.url||!DR.on||S.demo||!S.campi.length)return;
-  if(!(window.jspdf&&window.jspdf.jsPDF)){drStatus('PDF non disponibile ora: riapri la pagina con la connessione.');return}
   if(DR.busy){DR.again=true;return}
   DR.busy=true;
   fotoAll(function(all){
-    var fm={};all.forEach(function(f){var k=f.campo+'|'+ridOf(f);(fm[k]=fm[k]||[]).push(f.id)});
-    var jobs=[];
-    S.campi.forEach(function(c){
-      var seen={};
-      sortedReps(c.id).forEach(function(r){
-        var rid=r.rid||'r1',ids=(fm[c.id+'|'+rid]||[]).slice().sort(),txt=buildReport(c,r);
-        if(!r.date||(!txt&&!ids.length))return;
-        var n=(seen[r.date]=(seen[r.date]||0)+1);
-        var sig='v2|'+txt+'||'+ids.join(',');
-        var key=c.id+'|'+rid;
-        if(force||DR.sent[key]!==sig)jobs.push({c:c,r:r,key:key,sig:sig,hasPh:ids.length>0,sfx:n>1?'_'+n:''});
-      });
+    /* Senza il database delle foto del telefono non si manda niente: evita di partire da un elenco vuoto per errore. */
+    if(!idb){DR.busy=false;return}
+    var byId={};S.campi.forEach(function(c){byId[c.id]=c});
+    all.sort(function(a,b){return (a.ts||0)-(b.ts||0)});
+    /* Assegna il numero alle foto nuove e lo salva subito, così il nome resta lo stesso anche se l'invio fallisce. */
+    all.forEach(function(f){
+      var c=byId[f.campo];if(!c||DR.ph[f.id])return;
+      var base=drBase(c);DR.cnt[base]=(DR.cnt[base]||0)+1;
+      var n=DR.cnt[base];
+      DR.ph[f.id]={nome:base+'_'+(n<10?'0':'')+n+'.jpg',meta:{codice:String(c.codice),agricoltore:c.agricoltore||'',coltura:c.coltura||'',ditta:c.ditta||''}};
     });
+    drStore();
+    var jobs=all.filter(function(f){return DR.ph[f.id]&&(force||!DR.sent[f.id])});
     if(!jobs.length){DR.busy=false;drStatus('Cartella Drive aggiornata.');if(DR.again){DR.again=false;drSchedule(2000)}return}
     var done=0,fail='';
     (function next(){
       if(!jobs.length){
         DR.busy=false;drStore();
-        drStatus(fail?'Alcuni PDF non sono partiti ('+fail+'). Riproverà alla prossima modifica.':'Cartella Drive aggiornata: '+done+(done===1?' rilievo inviato.':' rilievi inviati.'));
+        drStatus(fail?'Alcune foto non sono partite ('+fail+'). Riproverà alla prossima modifica.':'Cartella Drive aggiornata: '+done+(done===1?' foto inviata.':' foto inviate.'));
         if(DR.again){DR.again=false;drSchedule(2000)}
         return;
       }
-      var j=jobs.shift(),c=j.c,r=j.r,code=String(c.codice).replace(/[^A-Za-z0-9_-]/g,'_');
-      drStatus('Invio a Drive: '+c.codice+' del '+fmtDate(r.date)+'… (mancano '+jobs.length+')');
-      var txt=buildReport(c,r),files=[];
-      pdfBuild(c,r,txt,'full',function(blob){
-        if(!blob)return next();
-        b64Of(blob,function(b){
-        if(!b)return next();
-        files.push({nome:'Relazione_'+code+'_'+r.date+j.sfx+'.pdf',base64:b});
-        if(!files.length)return next();
-        var meta={codice:String(c.codice),agricoltore:c.agricoltore||'',coltura:c.coltura||'',ditta:c.ditta||''};
-        fetch(SH.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({azione:'pdf',campo:meta,file:files,elimina:['Foto_'+code+'_'+r.date+j.sfx+'.pdf']})})
+      var f=jobs.shift(),info=DR.ph[f.id];
+      drStatus('Invio a Drive: '+info.nome+'… (mancano '+jobs.length+')');
+      b64Of(f.blob,function(b){
+        if(!b){fail='foto non leggibile';return next()}
+        fetch(SH.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({azione:'foto',campo:info.meta,file:[{nome:info.nome,base64:b,tipo:'image/jpeg'}]})})
           .then(function(x){return x.json()})
           .then(function(res){
             if(!res||!res.ok)throw new Error(res&&res.errore||'risposta non valida');
-            DR.sent[j.key]=j.sig;done++;
+            if(!res.v||res.v<2)throw new Error('aggiorna lo script Apps Script del foglio');
+            DR.sent[f.id]=1;done++;
             if(res.cartella)DR.folder=res.cartella;
-            drStore();drStatus(DR.folder?'Invio in corso…':'Invio in corso…');
+            drStore();
           })
           .catch(function(e){fail=String(e&&e.message||e)})
           .then(next);
-      })});
+      });
     })();
   });
 }
 (function(){
   var t=$('#drOn');
-  if(t){t.checked=DR.on;t.addEventListener('change',function(){DR.on=t.checked;drStore();if(DR.on)drSchedule(1500);else drStatus('Invio PDF su Drive spento.')})}
+  if(t){t.checked=DR.on;t.addEventListener('change',function(){DR.on=t.checked;drStore();if(DR.on)drSchedule(1500);else drStatus('Invio foto su Drive spento.')})}
   var g=$('#drGo');
   if(g)g.addEventListener('click',function(){
     if(!SH.url){drStatus('Prima collega il foglio Google qui sopra.');return}
@@ -1464,7 +1461,7 @@ function drSync(force){
     DR.on=true;if(t)t.checked=true;drStore();drSync(true);
   });
   if(!SH.url)drStatus('Disponibile dopo aver collegato il foglio Google.');
-  else drStatus(DR.on?(DR.folder?'Attivo. I PDF di ogni rilievo partono da soli.':'Attivo. Parte da solo dopo il prossimo rilievo, oppure usa il tasto qui sotto.'):'Spento.');
+  else drStatus(DR.on?(DR.folder?'Attivo. Le foto partono da sole.':'Attivo. Parte da solo dopo il prossimo rilievo, oppure usa il tasto qui sotto.'):'Spento.');
   window.addEventListener('online',function(){drSchedule(3000)});
 })();
 
