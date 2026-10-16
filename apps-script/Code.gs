@@ -2,7 +2,11 @@
  * Rilievi Seme: riepilogo su foglio Google.
  * Una riga per campo (stesse colonne del file Excel importato) e una colonna per ogni data di visita.
  * Va incollato in Estensioni > Apps Script di un foglio Google e pubblicato come "App web".
+ * Salva anche su Google Drive i PDF dei rilievi (relazione e foto), una sottocartella per campo.
  */
+var NOME_CARTELLA = 'Rilievi Seme - Report';
+// 'LINK' = chiunque abbia il link alla cartella può vedere i PDF (sola lettura); 'PRIVATA' = solo chi condividi a mano da Drive.
+var CONDIVISIONE = 'LINK';
 var NOME_FOGLIO = 'Rilievi';
 var INTESTAZIONI = ['Ditta sementiera', 'Tipo di coltura', 'Codice', 'Ettari', 'Nome agricoltore', 'Coordinate', 'Zona', 'Chiave'];
 
@@ -15,6 +19,7 @@ function doPost(e) {
   lock.waitLock(30000);
   try {
     var d = JSON.parse(e.postData.contents);
+    if (d.azione === 'pdf') return salvaPdf(d);
     var ss = SpreadsheetApp.getActive();
     var sh = ss.getSheetByName(NOME_FOGLIO) || ss.insertSheet(NOME_FOGLIO);
     var N = INTESTAZIONI.length;
@@ -77,4 +82,35 @@ function doPost(e) {
 
 function risposta(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function cartellaRadice() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('CARTELLA_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var f = DriveApp.createFolder(NOME_CARTELLA);
+  if (CONDIVISIONE === 'LINK') f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  props.setProperty('CARTELLA_ID', f.getId());
+  return f;
+}
+
+function sottocartella(radice, nome) {
+  var it = radice.getFoldersByName(nome);
+  return it.hasNext() ? it.next() : radice.createFolder(nome);
+}
+
+function pulisci(t) { return String(t || '').replace(/[\\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim(); }
+
+function salvaPdf(d) {
+  var radice = cartellaRadice();
+  var c = d.campo || {};
+  var nome = [pulisci(c.codice), pulisci(c.agricoltore), pulisci(c.coltura)].filter(String).join(' - ') || 'Senza nome';
+  var cart = sottocartella(radice, nome);
+  (d.file || []).forEach(function (f) {
+    var it = cart.getFilesByName(f.nome);
+    while (it.hasNext()) it.next().setTrashed(true);
+    var blob = Utilities.newBlob(Utilities.base64Decode(f.base64), 'application/pdf', f.nome);
+    cart.createFile(blob);
+  });
+  return risposta({ ok: true, cartella: radice.getUrl() });
 }
