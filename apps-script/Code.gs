@@ -2,7 +2,7 @@
  * Rilievi Seme: riepilogo su foglio Google.
  * Una riga per campo (stesse colonne del file Excel importato) e una colonna per ogni data di visita.
  * Va incollato in Estensioni > Apps Script di un foglio Google e pubblicato come "App web".
- * Salva anche su Google Drive i PDF dei rilievi (relazione e foto), una sottocartella per campo.
+ * Salva anche su Google Drive il PDF di ogni rilievo (relazione e foto), una sottocartella per campo.
  */
 var NOME_CARTELLA = 'Rilievi Seme - Report';
 // 'LINK' = chiunque abbia il link alla cartella può vedere i PDF (sola lettura); 'PRIVATA' = solo chi condividi a mano da Drive.
@@ -106,6 +106,10 @@ function salvaPdf(d) {
   var c = d.campo || {};
   var nome = [pulisci(c.codice), pulisci(c.agricoltore), pulisci(c.coltura)].filter(String).join(' - ') || 'Senza nome';
   var cart = sottocartella(radice, nome);
+  (d.elimina || []).forEach(function (n) {
+    var it = cart.getFilesByName(n);
+    while (it.hasNext()) it.next().setTrashed(true);
+  });
   (d.file || []).forEach(function (f) {
     var it = cart.getFilesByName(f.nome);
     while (it.hasNext()) it.next().setTrashed(true);

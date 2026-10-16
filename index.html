@@ -299,7 +299,7 @@ html,body{margin:0}
       </div>
       <div class="sec">
         <h2>Cartella Google Drive</h2>
-        <p>Per ogni rilievo salva due PDF in una cartella condivisa su Drive, una sottocartella per campo: la relazione (testo selezionabile) e le foto del rilievo. Usa lo stesso collegamento del foglio Google.</p>
+        <p>Per ogni rilievo salva un unico PDF (relazione con testo selezionabile e foto) in una cartella condivisa su Drive, una sottocartella per campo. Usa lo stesso collegamento del foglio Google.</p>
         <label style="display:flex;align-items:center;gap:8px;margin:6px 0"><input id="drOn" type="checkbox" checked> Invia i PDF su Drive in automatico</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           <button class="btn primary" id="drGo" type="button">Invia tutti i PDF ora</button>
@@ -1414,7 +1414,7 @@ function drSync(force){
         var rid=r.rid||'r1',ids=(fm[c.id+'|'+rid]||[]).slice().sort(),txt=buildReport(c,r);
         if(!r.date||(!txt&&!ids.length))return;
         var n=(seen[r.date]=(seen[r.date]||0)+1);
-        var sig=txt+'||'+ids.join(',');
+        var sig='v2|'+txt+'||'+ids.join(',');
         var key=c.id+'|'+rid;
         if(force||DR.sent[key]!==sig)jobs.push({c:c,r:r,key:key,sig:sig,hasPh:ids.length>0,sfx:n>1?'_'+n:''});
       });
@@ -1431,13 +1431,14 @@ function drSync(force){
       var j=jobs.shift(),c=j.c,r=j.r,code=String(c.codice).replace(/[^A-Za-z0-9_-]/g,'_');
       drStatus('Invio a Drive: '+c.codice+' del '+fmtDate(r.date)+'… (mancano '+jobs.length+')');
       var txt=buildReport(c,r),files=[];
-      function pack(name,blob,cb2){if(!blob)return cb2();b64Of(blob,function(b){if(b)files.push({nome:name,base64:b});cb2()})}
-      function textStep(cb2){if(!txt)return cb2();pdfBuild(c,r,txt,'text',function(b){pack('Relazione_'+code+'_'+r.date+j.sfx+'.pdf',b,cb2)})}
-      function photoStep(cb2){if(!j.hasPh)return cb2();pdfBuild(c,r,txt,'photos',function(b){pack('Foto_'+code+'_'+r.date+j.sfx+'.pdf',b,cb2)})}
-      textStep(function(){photoStep(function(){
+      pdfBuild(c,r,txt,'full',function(blob){
+        if(!blob)return next();
+        b64Of(blob,function(b){
+        if(!b)return next();
+        files.push({nome:'Relazione_'+code+'_'+r.date+j.sfx+'.pdf',base64:b});
         if(!files.length)return next();
         var meta={codice:String(c.codice),agricoltore:c.agricoltore||'',coltura:c.coltura||'',ditta:c.ditta||''};
-        fetch(SH.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({azione:'pdf',campo:meta,file:files})})
+        fetch(SH.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({azione:'pdf',campo:meta,file:files,elimina:['Foto_'+code+'_'+r.date+j.sfx+'.pdf']})})
           .then(function(x){return x.json()})
           .then(function(res){
             if(!res||!res.ok)throw new Error(res&&res.errore||'risposta non valida');
