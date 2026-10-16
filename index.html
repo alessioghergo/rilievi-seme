@@ -767,9 +767,9 @@ function openDetail(id,rid){
     +'<div class="q"><h3>Insetti</h3>'+seg('insetti',{v:'no',l:'No',t:'good'},{v:'si',l:'Sì',t:'bad'},r.insetti)
       +'<div class="field" id="bl-ins" hidden><label class="lbl" for="insNote">Quali (facoltativo)</label><input class="in" id="insNote" data-k="insNote" type="text" value="'+esc(r.insNote)+'"></div></div>'
     +'<div class="q"><h3>Commento sulla coltura</h3><textarea class="ta" id="note" data-k="note" rows="4" placeholder="Com\'è la coltura, uniformità, osservazioni">'+esc(r.note)+'</textarea></div>'
-    +'<div class="q"><h3>Note per l\'agricoltore</h3><textarea class="ta" id="agr" data-k="agr" rows="8" placeholder="Si compila da sola con i dati del rilievo">'+esc(r.agr||'')+'</textarea>'
-      +'<div class="nav"><button class="btn sm" id="agrCopy" type="button">Copia note</button><button class="btn sm" id="agrReset" type="button">Rigenera dal rilievo</button></div>'
-      +'<p class="hint">Stesso testo della relazione, senza ditta, agricoltore e zona. Si aggiorna da solo; se lo modifichi a mano resta com\'è finché non tocchi "Rigenera dal rilievo".</p></div>'
+    +'<div class="q"><h3>Note per l\'agricoltore</h3><textarea class="ta" id="agr" data-k="agr" rows="8" placeholder="Coltura e da fare">'+esc(r.agr||'')+'</textarea>'
+      +'<div class="nav"><button class="btn sm" id="agrCopy" type="button">Copia note</button><button class="btn sm" id="agrReset" type="button">Rigenera</button></div>'
+      +'<p class="hint">Si compila da sola con la coltura e "Da fare:". Scrivi tu i prodotti dopo "Da fare:"; il testo resta com\'è finché non tocchi "Rigenera".</p></div>'
     +'<div class="q"><div class="fotohead"><h3>Foto</h3><span id="fotoN"></span></div>'
       +'<label class="btn filebtn">Scatta o scegli foto<input id="foto" type="file" accept="image/*" multiple></label>'
       +'<div class="thumbs" id="thumbs"></div>'
@@ -798,14 +798,16 @@ function closeDetail(){
   thumbUrls.forEach(function(u){URL.revokeObjectURL(u)});thumbUrls=[];
   renderFilters();renderList();renderMap();
 }
-function buildReport(c,r,forFarmer){
+/* Note per l'agricoltore: solo la coltura e "Da fare" (i prodotti li scrive a mano ogni volta). */
+function buildFarmerNote(c){
+  return 'Coltura: '+(c.coltura||'')+'\nDa fare: ';
+}
+function buildReport(c,r){
   var L=['*RILIEVO CAMPO*','Data: '+fmtDate(r.date),'Codice: '+c.codice+(c.coltura?' · '+c.coltura:'')];
-  if(!forFarmer){
-    if(c.ditta)L.push('Ditta: '+c.ditta);
-    if(c.agricoltore)L.push('Agricoltore: '+c.agricoltore);
-  }
+  if(c.ditta)L.push('Ditta: '+c.ditta);
+  if(c.agricoltore)L.push('Agricoltore: '+c.agricoltore);
   if(c.ettari)L.push('Superficie: '+fmtHa(c.ettari)+' ha');
-  if(!forFarmer&&c.zona)L.push('Zona: '+c.zona);
+  if(c.zona)L.push('Zona: '+c.zona);
   L.push('');
   var any=false;
   if(r.stato==='completo'){L.push('Investimento: campo completo');any=true}
@@ -841,7 +843,7 @@ function syncDetail(){
   $('#bl-ins').hidden=r.insetti!=='si';
   var txt=buildReport(D.c,r);
   if(!r.agrEdited){
-    r.agr=buildReport(D.c,r,true);
+    r.agr=buildFarmerNote(D.c);
     var ta=$('#agr');if(ta&&document.activeElement!==ta)ta.value=r.agr;
   }
   $('#report').textContent=txt||'Compila il rilievo: la relazione compare qui.';
@@ -1278,7 +1280,7 @@ $('#dbody').addEventListener('click',function(e){
 });
 document.addEventListener('click',function(e){
   var id=e.target&&e.target.id;if(!D||(id!=='agrCopy'&&id!=='agrReset'))return;
-  if(id==='agrCopy'){var t=D.r.agr;if(!t||!t.trim()){toast('Compila prima il rilievo');return}copyText(t,'Note copiate')}
+  if(id==='agrCopy'){var t=D.r.agr;if(!t||!t.trim()){toast('Nessuna nota da copiare');return}copyText(t,'Note copiate')}
   else{D.r.agrEdited=false;var ta=$('#agr');if(ta)ta.blur();syncDetail();commitDetail();toast('Note rigenerate')}
 });
 $('#copy').addEventListener('click',function(){if(!D)return;var t=buildReport(D.c,D.r);if(!t){toast('Compila prima il rilievo');return;}copyText(t,'Relazione copiata')});
